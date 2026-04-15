@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import RecepcionistaDashboard from './pages/RecepcionistaDashboard';
 import FarmaciaDashboard from './pages/FarmaciaDashboard';
 import ProfissionalDashboard from './pages/ProfissionalDashboard';
+import ProfissionalAgenda from './pages/ProfissionalAgenda';
+import ProfissionalPacientesDia from './pages/ProfissionalPacientesDia';
 import Register from './pages/Register';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -28,6 +30,8 @@ export default function App() {
           <Route path='/recepcionista' element={<ProtectedRoute allowedRoles={['recepcionista']}><RecepcionistaDashboard /></ProtectedRoute>} />
           <Route path='/farmacia' element={<ProtectedRoute allowedRoles={['farmacia']}><FarmaciaDashboard /></ProtectedRoute>} />
           <Route path='/profissional' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalDashboard /></ProtectedRoute>} />
+          <Route path='/profissional/agenda' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalAgenda /></ProtectedRoute>} />
+          <Route path='/profissional/pacientes-dia' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientesDia /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

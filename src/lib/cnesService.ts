@@ -10,7 +10,61 @@ export interface CnesProfissional {
     especialidade: string;
 }
 
+export interface CnesHorario {
+    diaSemana?: string;
+    hrInicioAtendimento: string;
+    hrFimAtendimento: string;
+}
+
 export class CnesService {
+    /**
+     * Busca os horários de funcionamento de um estabelecimento no CNES.
+     */
+    static async buscarHorariosFuncionamento(codigoIbge: number | string, codigoCnes: number | string): Promise<CnesHorario[]> {
+        try {
+            let ibgeStr = codigoIbge.toString();
+            if (ibgeStr.length === 7) {
+                // A API de CNES exige os 6 primeiros dígitos do IBGE
+                ibgeStr = ibgeStr.substring(0, 6);
+            }
+            const cnesStr = codigoCnes.toString().padStart(7, '0');
+            const id = `${ibgeStr}${cnesStr}`;
+
+            // O pulo do gato: obter cookie da página-mãe
+            await fetch(`/api-datasus/pages/estabelecimentos/consulta.jsp`, {
+                method: 'GET',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+                }
+            });
+
+            const url = `/api-datasus/services/estabelecimentos-atendimento/${id}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+                    'Referer': 'https://cnes.datasus.gov.br/pages/estabelecimentos/consulta.jsp'
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    return data.map((item: any) => ({
+                        diaSemana: item.diaSemana || '',
+                        hrInicioAtendimento: item.hrInicioAtendimento || '07:00',
+                        hrFimAtendimento: item.hrFimAtendimento || '19:00',
+                    }));
+                }
+            }
+            return [];
+        } catch (error) {
+            console.error('[CnesService] Erro ao buscar horários de funcionamento:', error);
+            return [];
+        }
+    }
+
     /**
      * Busca estabelecimentos de saúde do CNES (apenas UBS = tipo 2 por padrão).
      */

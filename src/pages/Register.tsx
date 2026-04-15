@@ -64,7 +64,7 @@ export default function Register() {
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedProfissional) {
+        if (!selectedProfissional || !selectedEstabelecimento) {
             setError('Selecione seu perfil na lista de profissionais do estabelecimento.');
             return;
         }
@@ -92,6 +92,8 @@ export default function Register() {
                         cpf: cpf.replace(/\D/g, ''),
                         role: role,
                         crm_crf: crmCrf,
+                        ibge: municipio.toString(),
+                        cnes: selectedEstabelecimento.codigoCnes.toString(),
                     });
 
                 if (insertError) throw insertError;

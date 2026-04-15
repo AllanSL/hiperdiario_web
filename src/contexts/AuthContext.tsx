@@ -6,6 +6,8 @@ type UserProfile = {
     id: string;
     role: 'recepcionista' | 'farmacia' | 'profissional_saude';
     nome: string;
+    cnes?: string;
+    ibge?: string;
 };
 
 type AuthContextType = {
