@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -24,12 +24,12 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
 
     const selectedLabel = options.find((o) => o.value === value)?.label || '';
 
-    // Filtra as opÃ§Ãµes
+    // Filtra as opções
     const filteredOptions = query === ''
         ? options
         : options.filter((opt) => opt.label.toLowerCase().includes(query.toLowerCase()));
 
-    // OpÃ§Ã£o extra para o "placeholder" (limpar seleÃ§Ã£o)
+    // Opção extra para o "placeholder" (limpar seleção)
     const allOptions = [{ value: '', label: placeholder }, ...filteredOptions];
 
     // Fecha o dropdown se clicar fora
@@ -134,25 +134,28 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
             </div>
 
             {open && !disabled && (
-                <ul ref={listRef} className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-[40vh] rounded-lg py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
-                {filteredOptions.length === 0 ? (
-                    <li className="relative py-2.5 pl-3 pr-9 text-gray-500 select-none text-base font-normal">Nenhuma opção encontrada...</li>
-                ) : (
-                    allOptions.map((opt, index) => (
-                        <li
-                            key={opt.value === '' ? 'placeholder' : opt.value}
-                            className={`font-normal text-base hover:cursor-pointer select-none relative py-2.5 pl-3 pr-9 transition-colors
-                                ${opt.value === value && focusedIndex !== index ? 'bg-teal-50 text-teal-900 font-medium' : 'text-gray-900'}
-                                ${focusedIndex === index ? 'bg-teal-600 text-white' : 'hover:bg-teal-50 hover:text-teal-900'}
-                            `}
-                            onClick={() => { onChange(opt.value); setOpen(false); setQuery(''); setFocusedIndex(-1); }}
-                            onMouseEnter={() => setFocusedIndex(index)}
-                        >
-                            {opt.label}
-                        </li>
-                    ))
-                )}
-            </ul>
+                <ul 
+                    ref={listRef}
+                    className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-[40vh] rounded-lg py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none"
+                >
+                    {filteredOptions.length === 0 ? (
+                        <li className="relative py-2 pl-3 pr-9 text-gray-500 select-none">Nenhuma opção encontrada...</li>
+                    ) : (
+                        allOptions.map((opt, index) => (
+                            <li
+                                key={opt.value === '' ? 'placeholder' : opt.value}
+                                className={`text-gray-900 hover:cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-600 hover:text-white 
+                                    ${opt.value === value && focusedIndex !== index ? 'bg-blue-50' : ''} 
+                                    ${focusedIndex === index ? 'bg-blue-600 text-white' : ''}
+                                `}
+                                onClick={() => { onChange(opt.value); setOpen(false); setQuery(''); setFocusedIndex(-1); }}
+                                onMouseEnter={() => setFocusedIndex(index)}
+                            >
+                                {opt.label}
+                            </li>
+                        ))
+                    )}
+                </ul>
             )}
         </div>
     );

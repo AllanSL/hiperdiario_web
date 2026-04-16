@@ -84,6 +84,26 @@ export default function Register() {
             if (authError) throw authError;
 
             if (authData.user) {
+                // Registrar a unidade de saúde no banco caso não exista
+                const { data: existingCnes } = await supabase
+                    .from('cnes_establishments')
+                    .select('cnes_id')
+                    .eq('cnes_id', selectedEstabelecimento.codigoCnes.toString())
+                    .single();
+
+                if (!existingCnes) {
+                    await supabase.from('cnes_establishments').insert({
+                        cnes_id: selectedEstabelecimento.codigoCnes.toString(),
+                        city_ibge: selectedEstabelecimento.ibgeOriginal || municipio,
+                        name: selectedEstabelecimento.nomeFantasia,
+                        address: selectedEstabelecimento.endereco,
+                        latitude: selectedEstabelecimento.latitude || null,
+                        longitude: selectedEstabelecimento.longitude || null,
+                        uf: selectedEstabelecimento.uf?.toString() || uf.toString(),
+                        phone: selectedEstabelecimento.phone || null
+                    });
+                }
+
                 const { error: insertError } = await supabase
                     .from('profissionais')
                     .insert({

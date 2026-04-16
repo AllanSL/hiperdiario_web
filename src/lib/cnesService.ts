@@ -1,8 +1,14 @@
+import { supabase } from './supabase';
+
 export interface CnesEstabelecimento {
     codigoCnes: number;
     nomeFantasia: string;
     endereco: string;
     ibgeOriginal?: number;
+    latitude?: number;
+    longitude?: number;
+    uf?: number;
+    phone?: string;
 }
 
 export interface CnesProfissional {
@@ -22,46 +28,48 @@ export class CnesService {
      */
     static async buscarHorariosFuncionamento(codigoIbge: number | string, codigoCnes: number | string): Promise<CnesHorario[]> {
         try {
-            let ibgeStr = codigoIbge.toString();
-            if (ibgeStr.length === 7) {
-                // A API de CNES exige os 6 primeiros dígitos do IBGE
-                ibgeStr = ibgeStr.substring(0, 6);
-            }
-            const cnesStr = codigoCnes.toString().padStart(7, '0');
-            const id = `${ibgeStr}${cnesStr}`;
-
-            // O pulo do gato: obter cookie da página-mãe
-            await fetch(`/api-datasus/pages/estabelecimentos/consulta.jsp`, {
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
-                }
+            console.log(`[CnesService] Buscando horários via Edge Function para IBGE: ${codigoIbge}, CNES: ${codigoCnes}`);
+            
+            const { data, error } = await supabase.functions.invoke('cnes-proxy', {
+                body: { ibge: codigoIbge, cnes: codigoCnes }
             });
 
-            const url = `/api-datasus/services/estabelecimentos-atendimento/${id}`;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-                    'Referer': 'https://cnes.datasus.gov.br/pages/estabelecimentos/consulta.jsp'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data)) {
-                    return data.map((item: any) => ({
-                        diaSemana: item.diaSemana || '',
-                        hrInicioAtendimento: item.hrInicioAtendimento || '07:00',
-                        hrFimAtendimento: item.hrFimAtendimento || '19:00',
-                    }));
-                }
+            if (error) {
+                console.error(`Erro retornado pela Edge Function:`, error);
+                throw new Error(`Erro retornado pela Edge Function: ${error.message}`);
             }
+
+            let parsedData = data;
+            if (typeof data === 'string') {
+                try {
+                    parsedData = JSON.parse(data);
+                } catch(e) {}
+            }
+
+            console.log('[CnesService] Dados recebidos da API:', parsedData);
+
+            if (Array.isArray(parsedData)) {
+                return parsedData.map((item: any) => ({
+                    diaSemana: item.diaSemana || '',
+                    hrInicioAtendimento: item.hrInicioAtendimento || '07:00',
+                    hrFimAtendimento: item.hrFimAtendimento || '17:00',
+                }));
+            } else if (parsedData && Array.isArray(parsedData.horariosItem)) {
+                // Algumas APIs retornam com wrapper
+                return parsedData.horariosItem.map((item: any) => ({
+                    diaSemana: item.diaSemana || '',
+                    hrInicioAtendimento: item.hrInicioAtendimento || '07:00',
+                    hrFimAtendimento: item.hrFimAtendimento || '17:00',
+                }));
+            }
+            
             return [];
         } catch (error) {
             console.error('[CnesService] Erro ao buscar horários de funcionamento:', error);
-            return [];
+            // Default fallback in case the API completely fails
+            return [
+                { diaSemana: 'Segunda a Sexta (Fallback)', hrInicioAtendimento: '08:00', hrFimAtendimento: '17:00' }
+            ];
         }
     }
 
@@ -95,6 +103,10 @@ export class CnesService {
                     nomeFantasia: nome || 'Estabelecimento sem nome',
                     endereco: partes,
                     ibgeOriginal: codigoMunicipio, // Guardamos o IBGE original de 7 dígitos
+                    latitude: e.latitude_estabelecimento_decimo_grau || null,
+                    longitude: e.longitude_estabelecimento_decimo_grau || null,
+                    uf: e.codigo_uf || codigoUf,
+                    phone: e.numero_telefone_estabelecimento || '',
                 };
             });
         } catch (error) {

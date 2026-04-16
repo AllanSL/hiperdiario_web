@@ -1,0 +1,380 @@
+﻿import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History } from 'lucide-react';
+import { CustomSelect } from '../components/CustomSelect';
+
+interface Medicine {
+    id: string;
+    active_principle: string;
+    strength: string;
+    form: string;
+    category: string;
+    dispensing_unit: string;
+    reference_box_qty: number;
+}
+
+interface Patient {
+    id: string | number;
+    cpf: string;
+    name: string;
+    conditions?: string[]; // Array de condições (ex: ['Diabetes Tipo 1', 'Hipertensão'])
+}
+
+function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] }) {
+    const [inventory, setInventory] = useState<Record<string, number>>({});
+    const [loading, setLoading] = useState(true);
+    const [updating, setUpdating] = useState<string | null>(null);
+    
+    // Filters
+    const [search, setSearch] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [stockFilter, setStockFilter] = useState('all'); // 'all', 'in_stock', 'out_of_stock'
+
+    const availableCategories = useMemo(() => {
+        return Array.from(new Set(catalog.map(c => c.category))).sort();
+    }, [catalog]);
+
+    useEffect(() => {
+        if (!cnes) return;
+
+        const fetchInventory = async () => {
+            const { data } = await supabase.from('pharmacy_inventory').select('catalog_id, quantity_in_stock').eq('ubs_cnes', cnes);
+            if (data) {
+                const map: Record<string, number> = {};
+                data.forEach(item => {
+                    map[item.catalog_id] = item.quantity_in_stock;
+                });
+                setInventory(map);
+            }
+            setLoading(false);
+        };
+        fetchInventory();
+    }, [cnes]);
+
+    const handleUpdateStock = async (med: Medicine, changeRaw: string) => {
+        if (!changeRaw || isNaN(Number(changeRaw))) return;
+        const quantity = Number(changeRaw);
+        setUpdating(med.id);
+        try {
+            const currentStock = inventory[med.id] || 0;
+            const newStock = Math.max(0, currentStock + quantity);
+
+            const { error } = await supabase.from('pharmacy_inventory').upsert(
+                { ubs_cnes: cnes, catalog_id: med.id, quantity_in_stock: newStock, last_updated_at: new Date().toISOString() },
+                { onConflict: 'ubs_cnes, catalog_id' }
+            );
+
+            if (!error) {
+                setInventory(prev => ({ ...prev, [med.id]: newStock }));
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setUpdating(null);
+        }
+    };
+
+    const filtered = catalog.filter(m => {
+        const matchSearch = m.active_principle.toLowerCase().includes(search.toLowerCase()) || m.category.toLowerCase().includes(search.toLowerCase());
+        const matchCat = categoryFilter === '' || m.category === categoryFilter;
+        
+        const stock = inventory[m.id] || 0;
+        let matchStock = true;
+        if (stockFilter === 'in_stock') matchStock = stock > 0;
+        if (stockFilter === 'out_of_stock') matchStock = stock === 0;
+
+        return matchSearch && matchCat && matchStock;
+    });
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><PackageSearch size={24} /></div>
+                    <h3 className="text-lg font-semibold">Gerenciar Estoque ({cnes || 'N/D'})</h3>
+                </div>
+                
+                <div className="flex flex-col md:flex-row items-center gap-3">
+                    <select 
+                        value={stockFilter} 
+                        onChange={e => setStockFilter(e.target.value)}
+                        className="w-full md:w-auto border border-gray-200 rounded-lg p-2 text-sm focus:ring-1 focus:ring-teal-500 outline-none bg-white"
+                    >
+                        <option value="all">Todos os status</option>
+                        <option value="in_stock">Com saldo em estoque</option>
+                        <option value="out_of_stock">Sem saldo (Zerado)</option>
+                    </select>
+
+                    <select 
+                        value={categoryFilter} 
+                        onChange={e => setCategoryFilter(e.target.value)}
+                        className="w-full md:w-auto border border-gray-200 rounded-lg p-2 text-sm focus:ring-1 focus:ring-teal-500 outline-none bg-white"
+                    >
+                        <option value="">Todas as categorias</option>
+                        {availableCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                    </select>
+
+                    <div className="relative w-full md:w-auto">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <input 
+                            type="text" placeholder="Buscar medicamento..." 
+                            value={search} onChange={e => setSearch(e.target.value)}
+                            className="pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-teal-500 outline-none w-full md:w-64 bg-white"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {loading ? <p className="text-gray-500 italic">Carregando catálogo e estoque...</p> : (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
+                                <th className="p-3 font-medium rounded-tl-lg">Medicamento</th>
+                                <th className="p-3 font-medium">Categoria / Forma</th>
+                                <th className="p-3 font-medium text-center">Último Saldo</th>
+                                <th className="p-3 font-medium rounded-tr-lg w-48">Entrada/Ajuste (+/-)</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {filtered.length === 0 ? (
+                                <tr><td colSpan={4} className="p-6 text-center text-gray-500">Nenhum medicamento encontrado nos filtros selecionados.</td></tr>
+                            ) : (
+                                filtered.map(med => {
+                                    const stock = inventory[med.id] || 0;
+                                    return (
+                                        <tr key={med.id} className="hover:bg-gray-50">
+                                            <td className="p-3">
+                                                <p className="font-medium text-gray-900 text-sm">{med.active_principle} {med.strength}</p>
+                                            </td>
+                                            <td className="p-3 text-sm text-gray-500">{med.category} • {med.form}</td>
+                                            <td className={`p-3 text-center font-bold ${stock <= 0 ? 'text-red-500' : stock < 50 ? 'text-orange-500' : 'text-green-600'}`}>
+                                                {stock} <span className="text-xs font-normal text-gray-500 ml-1">{med.dispensing_unit}</span>
+                                            </td>
+                                            <td className="p-3">
+                                                <form onSubmit={(e) => { e.preventDefault(); const target = e.target as any; handleUpdateStock(med, target.elements.change.value); target.reset(); }} className="flex items-center gap-2">
+                                                    <input name="change" type="number" placeholder="Ex: 100 ou -10" disabled={updating === med.id} className="w-24 border border-gray-200 p-1.5 px-3 rounded-lg text-sm text-center outline-none focus:border-teal-500 bg-white" />
+                                                    <button type="submit" disabled={updating === med.id} className="bg-teal-100 hover:bg-teal-200 text-teal-700 px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50">
+                                                        {updating === med.id ? '...' : 'Salvar'}
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+        </div>
+    );
+}
+
+function FarmaciaHistorico({ cnes }: { cnes: string }) {
+    const [history, setHistory] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!cnes) return;
+
+        const fetchHistory = async () => {
+            const { data } = await supabase
+                .from('medicine_dispensations')
+                .select('id, dispensed_at, dispensed_quantity, prescribing_doctor, ubs_cnes, users!medicine_dispensations_patient_id_fkey(name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
+                .eq('ubs_cnes', cnes)
+                .order('dispensed_at', { ascending: false })
+                .limit(50);
+            
+            if (data) setHistory(data);
+            setLoading(false);
+        };
+        fetchHistory();
+    }, [cnes]);
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><History size={24} /></div>
+                <h3 className="text-lg font-semibold">Últimas Retiradas ({cnes || 'N/D'})</h3>
+            </div>
+            
+            {loading ? <p className="text-gray-500 italic">Buscando histórico...</p> : history.length === 0 ? <p className="text-gray-500 italic">Nenhuma retirada registrada ainda.</p> : (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
+                                <th className="p-3 font-medium">Data/Hora</th>
+                                <th className="p-3 font-medium">Paciente</th>
+                                <th className="p-3 font-medium">Medicamento Retirado</th>
+                                <th className="p-3 font-medium">Qtd.</th>
+                                <th className="p-3 font-medium">Prescritor</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {history.map(row => (
+                                <tr key={row.id} className="hover:bg-gray-50 text-sm">
+                                    <td className="p-3 text-gray-600 whitespace-nowrap">{new Date(row.dispensed_at).toLocaleString('pt-BR')}</td>
+                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {row.users?.cpf}</span></td>
+                                    <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
+                                    <td className="p-3 font-bold text-gray-700">{row.dispensed_quantity} <span className="text-xs font-normal">{row.medicine_catalog?.dispensing_unit}</span></td>
+                                    <td className="p-3 text-gray-600">{row.prescribing_doctor}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function FarmaciaMedicamentos({ cnes, catalog }: { cnes: string; catalog: Medicine[] }) {
+    const [loading, setLoading] = useState(false);
+    const [msg, setMsg] = useState({ text: '', type: '' });
+    
+    const [selectedPrinciple, setSelectedPrinciple] = useState('');
+    const [selectedStrength, setSelectedStrength] = useState('');
+    const [initialStock, setInitialStock] = useState<number | ''>('');
+
+    const uniquePrinciples = useMemo(() => {
+        return Array.from(new Set(catalog.map(m => m.active_principle))).sort();
+    }, [catalog]);
+
+    const availableStrengths = useMemo(() => {
+        if (!selectedPrinciple) return [];
+        const strengths = catalog
+            .filter(m => m.active_principle === selectedPrinciple)
+            .map(m => m.strength);
+        return Array.from(new Set(strengths)).sort();
+    }, [catalog, selectedPrinciple]);
+
+    const selectedMedObj = useMemo(() => {
+        if (!selectedPrinciple || !selectedStrength) return null;
+        return catalog.find(m => m.active_principle === selectedPrinciple && m.strength === selectedStrength) || null;
+    }, [selectedPrinciple, selectedStrength, catalog]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedMedObj) {
+            setMsg({ text: 'Selecione um medicamento válido do catálogo.', type: 'error' });
+            return;
+        }
+
+        setLoading(true);
+        setMsg({ text: '', type: '' });
+
+        try {
+            const { error } = await supabase.from('pharmacy_inventory').upsert({
+                catalog_id: selectedMedObj.id,
+                ubs_cnes: cnes,
+                quantity_in_stock: Number(initialStock) || 0,
+                last_updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'catalog_id,ubs_cnes'
+            });
+
+            if (error) throw error;
+
+            setMsg({ text: 'Medicamento adicionado ao estoque local com sucesso!', type: 'success' });
+            setSelectedPrinciple('');
+            setSelectedStrength('');
+            setInitialStock('');
+            setTimeout(() => window.location.reload(), 2000);
+        } catch (err: any) {
+            setMsg({ text: err.message || 'Erro ao adicionar.', type: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><PackageSearch size={24} /></div>
+                <h3 className="text-lg font-semibold">Adicionar Medicamento ao Estoque Local</h3>
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-6">
+                Selecione o medicamento no banco padrão do SUS para adicionar ao estoque da sua unidade de saúde.
+            </p>
+
+            <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
+                {msg.text && (
+                    <div className={`p-3 rounded-lg text-sm font-medium ${msg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {msg.text}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative z-20">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Princípio Ativo *</label>
+                        <CustomSelect 
+                            options={uniquePrinciples.map(p => ({ value: p, label: p }))} 
+                            value={selectedPrinciple} 
+                            onChange={(val) => {
+                                setSelectedPrinciple(val as string);
+                                setSelectedStrength('');
+                            }} 
+                            placeholder="Selecione o medicamento" 
+                        />
+                    </div>
+                    
+                    <div className="relative z-10">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Dosagem / Concentração *</label>
+                        <CustomSelect 
+                            disabled={!selectedPrinciple} 
+                            options={availableStrengths.map(s => {
+                                const m = catalog.find(med => med.active_principle === selectedPrinciple && med.strength === s);
+                                return { value: s, label: `${s} (${m?.form})` };
+                            })} 
+                            value={selectedStrength} 
+                            onChange={(val) => setSelectedStrength(val as string)} 
+                            placeholder="Selecione" 
+                        />
+                    </div>
+                </div>
+
+                {selectedMedObj && (
+                    <div className="mt-4 p-4 border border-teal-200 bg-teal-50 rounded-lg">
+                        <div className="mb-4">
+                            <p className="font-semibold text-teal-800">
+                                {selectedMedObj.active_principle} {selectedMedObj.strength}
+                            </p>
+                            <p className="text-sm text-teal-600">{selectedMedObj.category} - {selectedMedObj.form}</p>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-teal-800 mb-1">Estoque Inicial</label>
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    required 
+                                    type="number" 
+                                    min="0" 
+                                    className="w-48 border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-teal-500 outline-none" 
+                                    value={initialStock} 
+                                    onChange={e => setInitialStock(e.target.value ? Number(e.target.value) : '')} 
+                                />
+                                <span className="text-sm text-teal-700 font-medium">{selectedMedObj.dispensing_unit}s</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end">
+                    <button type="submit" disabled={loading || !selectedMedObj} className="bg-teal-600 hover:bg-teal-700 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm transition disabled:opacity-50">
+                        {loading ? 'Adicionando...' : 'Adicionar à UBS'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+export default function FarmaciaDashboard() {
+    const { profile } = useAuth();
+    const handleLogout = () => supabase.auth.signOut();
+
+    const [medicines, setMedicines] = useState<Medicine[]>([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // Modal State
