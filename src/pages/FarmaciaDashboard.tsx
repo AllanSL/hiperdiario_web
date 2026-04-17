@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History } from 'lucide-react';
+import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock } from 'lucide-react';
 import { CustomSelect } from '../components/CustomSelect';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 interface Medicine {
     id: string;
@@ -88,8 +89,8 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
     });
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><PackageSearch size={24} /></div>
                     <h3 className="text-lg font-semibold">Gerenciar Estoque</h3>
@@ -128,14 +129,14 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
                 </div>
             </div>
 
-            {loading ? <p className="text-gray-500 italic">Carregando catálogo e estoque...</p> : (
-                <div className="overflow-x-auto">
+            {loading ? <p className="text-gray-500 italic shrink-0">Carregando catálogo e estoque...</p> : (
+                <div className="flex-1 overflow-auto min-h-0 border border-gray-100 rounded-lg shadow-inner">
                     <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
+                        <thead className="sticky top-0 bg-gray-50 shadow-sm z-10">
+                            <tr className="border-b border-gray-200 text-sm text-gray-600">
                                 <th className="p-3 font-medium rounded-tl-lg">Medicamento</th>
                                 <th className="p-3 font-medium w-[20%]">Categoria / Forma</th>
-                                <th className="p-3 font-medium text-center">Último Saldo</th>
+                                <th className="p-3 font-medium text-center">Saldo</th>
                                 <th className="p-3 font-medium rounded-tr-lg w-64">Entrada/Ajuste (+/-)</th>
                             </tr>
                         </thead>
@@ -152,7 +153,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
                                             </td>
                                             <td className="p-3 text-sm text-gray-500">{med.category} • {med.form}</td>
                                             <td className={`p-3 text-center font-bold ${stock <= 0 ? 'text-red-500' : stock < 50 ? 'text-orange-500' : 'text-green-600'}`}>
-                                                {stock} <span className="text-xs font-normal text-gray-500 ml-1">{med.dispensing_unit}</span>
+                                                {stock} <span className="text-xs font-normal text-gray-500 ml-1">{med.dispensing_unit}{stock > 1 ? 's' : ''}</span>
                                             </td>
                                             <td className="p-3">
                                                 <form onSubmit={(e) => { e.preventDefault(); const target = e.target as any; handleUpdateStock(med, target.elements.change.value); target.reset(); }} className="flex items-center gap-2">
@@ -177,41 +178,120 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
 function FarmaciaHistorico({ cnes }: { cnes: string }) {
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [undoing, setUndoing] = useState<number | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, data?: any}>({ isOpen: false });
+    const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+
+    const fetchHistory = async () => {
+        if (!cnes) return;
+        setLoading(true);
+        const { data } = await supabase
+            .from('medicine_dispensations')
+            .select('id, catalog_id, dispensed_at, dispensed_quantity, prescribing_doctor, ubs_cnes, users!medicine_dispensations_patient_id_fkey(name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
+            .eq('ubs_cnes', cnes)
+            .order('dispensed_at', { ascending: false })
+            .limit(50);
+        
+        if (data) setHistory(data);
+        setLoading(false);
+    };
 
     useEffect(() => {
-        if (!cnes) return;
-
-        const fetchHistory = async () => {
-            const { data } = await supabase
-                .from('medicine_dispensations')
-                .select('id, dispensed_at, dispensed_quantity, prescribing_doctor, ubs_cnes, users!medicine_dispensations_patient_id_fkey(name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
-                .eq('ubs_cnes', cnes)
-                .order('dispensed_at', { ascending: false })
-                .limit(50);
-            
-            if (data) setHistory(data);
-            setLoading(false);
-        };
         fetchHistory();
     }, [cnes]);
 
+    const handleUndo = async () => {
+        if (!confirmModal.data) return;
+        const { dispensationId, catalogId, quantity } = confirmModal.data;
+        
+        setUndoing(dispensationId);
+        try {
+            // 0. Remove do app mobile do paciente
+            await supabase
+                .from('medications')
+                .delete()
+                .eq('dispensation_id', dispensationId);
+
+            // 1. Deletar o registro de dispensação
+            const { error: delErr } = await supabase
+                .from('medicine_dispensations')
+                .delete()
+                .eq('id', dispensationId);
+
+            if (delErr) throw delErr;
+
+            // 2. Buscar o estoque atual
+            const { data: stockData } = await supabase
+                .from('pharmacy_inventory')
+                .select('quantity_in_stock')
+                .eq('ubs_cnes', cnes)
+                .eq('catalog_id', catalogId)
+                .single();
+
+            // 3. Atualizar devolvendo o estoque
+            if (stockData) {
+                await supabase
+                    .from('pharmacy_inventory')
+                    .update({ 
+                        quantity_in_stock: stockData.quantity_in_stock + quantity,
+                        last_updated_at: new Date().toISOString()
+                    })
+                    .eq('ubs_cnes', cnes)
+                    .eq('catalog_id', catalogId);
+            }
+
+            // Atualiza a lista após desfazer
+            fetchHistory();
+            setConfirmModal({ isOpen: false });
+            setAlertModal({ isOpen: true, title: 'Sucesso', message: 'Retirada desfeita e saldo devolvido com sucesso!' });
+        } catch (err: any) {
+            console.error(err);
+            setConfirmModal({ isOpen: false });
+            setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao desfazer: ' + err.message });
+        } finally {
+            setUndoing(null);
+        }
+    };
+
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3 mb-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
+            <ConfirmModal 
+                isOpen={confirmModal.isOpen}
+                title="Desfazer Dispensação"
+                message={`Tem certeza que deseja desfazer esta dispensação? Isso devolverá ${confirmModal.data?.quantity} unidades para o estoque da UBS.`}
+                confirmText="Sim, desfazer"
+                cancelText="Mudei de ideia"
+                onConfirm={handleUndo}
+                onCancel={() => setConfirmModal({ isOpen: false })}
+                loading={undoing !== null}
+            />
+            
+            <ConfirmModal 
+                isOpen={alertModal.isOpen}
+                title={alertModal.title}
+                message={alertModal.message}
+                isAlert={true}
+                confirmText="Entendi"
+                onConfirm={() => setAlertModal({ isOpen: false, title: '', message: '' })}
+                onCancel={() => {}}
+            />
+
+            <div className="flex items-center gap-3 mb-6 shrink-0">
                 <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><History size={24} /></div>
                 <h3 className="text-lg font-semibold">Últimas Retiradas</h3>
             </div>
             
-            {loading ? <p className="text-gray-500 italic">Buscando histórico...</p> : history.length === 0 ? <p className="text-gray-500 italic">Nenhuma retirada registrada ainda.</p> : (
-                <div className="overflow-x-auto">
+            {loading ? <p className="text-gray-500 italic shrink-0">Buscando histórico...</p> : history.length === 0 ? <p className="text-gray-500 italic shrink-0">Nenhuma retirada registrada ainda.</p> : (
+                <div className="flex-1 overflow-auto min-h-0 border border-gray-100 rounded-lg shadow-inner">
                     <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
+                        <thead className="sticky top-0 bg-gray-50 shadow-sm z-10">
+                            <tr className="border-b border-gray-200 text-sm text-gray-600">
                                 <th className="p-3 font-medium">Data/Hora</th>
                                 <th className="p-3 font-medium">Paciente</th>
                                 <th className="p-3 font-medium">Medicamento Retirado</th>
                                 <th className="p-3 font-medium">Qtd.</th>
                                 <th className="p-3 font-medium">Prescritor</th>
+                                <th className="p-3 font-medium text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -220,14 +300,610 @@ function FarmaciaHistorico({ cnes }: { cnes: string }) {
                                     <td className="p-3 text-gray-600 whitespace-nowrap">{new Date(row.dispensed_at).toLocaleString('pt-BR')}</td>
                                     <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {row.users?.cpf}</span></td>
                                     <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
-                                    <td className="p-3 font-bold text-gray-700">{row.dispensed_quantity} <span className="text-xs font-normal">{row.medicine_catalog?.dispensing_unit}</span></td>
+                                    <td className="p-3 font-bold text-gray-700">{row.dispensed_quantity} <span className="text-xs font-normal">{row.medicine_catalog?.dispensing_unit}{row.dispensed_quantity > 1 ? 's' : ''}</span></td>
                                     <td className="p-3 text-gray-600">{row.prescribing_doctor}</td>
+                                    <td className="p-3 text-center">
+                                        <button
+                                            onClick={() => setConfirmModal({ isOpen: true, data: { dispensationId: row.id, catalogId: row.catalog_id, quantity: row.dispensed_quantity } })}
+                                            disabled={undoing === row.id}
+                                            title="Desfazer e Devolver Estoque"
+                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition disabled:opacity-50 inline-flex items-center justify-center"
+                                        >
+                                            {undoing === row.id ? '⏳' : <RotateCcw size={18} />}
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             )}
+        </div>
+    );
+}
+
+function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
+    const [patients, setPatients] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!cnes) return;
+
+        const fetchMonitoramento = async () => {
+            const fortyFiveDaysAgo = new Date();
+            fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+
+            const { data } = await supabase
+                .from('medicine_dispensations')
+                .select('id, dispensed_at, users!medicine_dispensations_patient_id_fkey(id, name, cpf), medicine_catalog(active_principle, strength)')
+                .eq('ubs_cnes', cnes)
+                .gte('dispensed_at', fortyFiveDaysAgo.toISOString())
+                .order('dispensed_at', { ascending: false });
+
+            if (data) {
+                const grouped = new Map();
+                const hoje = new Date();
+                hoje.setHours(0,0,0,0);
+                
+                data.forEach((item: any) => {
+                    const key = `${item.users?.id}-${item.medicine_catalog?.active_principle}`;
+                    if (!grouped.has(key)) {
+                        const dispensedDate = new Date(item.dispensed_at);
+                        const dataPrevista = new Date(dispensedDate);
+                        dataPrevista.setDate(dataPrevista.getDate() + 30); // Padrão 30 dias
+                        
+                        const diffTime = dataPrevista.getTime() - hoje.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                        if (diffDays <= 7) {
+                            grouped.set(key, { ...item, dataPrevista, diffDays });
+                        }
+                    }
+                });
+                
+                setPatients(Array.from(grouped.values()).sort((a, b) => a.diffDays - b.diffDays));
+            }
+            setLoading(false);
+        };
+        fetchMonitoramento();
+    }, [cnes]);
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
+            <div className="flex items-center gap-3 mb-6 shrink-0">
+                <div className="p-3 bg-red-50 text-red-600 rounded-lg"><Users size={24} /></div>
+                <div>
+                    <h3 className="text-lg font-semibold">Alerta de Estoque em Pacientes</h3>
+                    <p className="text-sm text-gray-500">Pacientes que retiraram comissão há +23 dias (base 30 dias)</p>
+                </div>
+            </div>
+            
+            {loading ? <p className="text-gray-500 italic shrink-0">Analisando dados...</p> : patients.length === 0 ? <p className="text-gray-500 italic shrink-0">Nenhum paciente com medicação perto de acabar.</p> : (
+                <div className="flex-1 overflow-auto min-h-0 border border-gray-100 rounded-lg shadow-inner">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-gray-50 shadow-sm z-10">
+                            <tr className="border-b border-gray-200 text-sm text-gray-600">
+                                <th className="p-3 font-medium">Situação</th>
+                                <th className="p-3 font-medium">Paciente</th>
+                                <th className="p-3 font-medium">Medicamento</th>
+                                <th className="p-3 font-medium">Previsto Acabar em</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {patients.map(row => (
+                                <tr key={row.id} className="hover:bg-gray-50 text-sm">
+                                    <td className="p-3">
+                                        {row.diffDays < 0 ? (
+                                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Atrasado (há {-row.diffDays} dias)</span>
+                                        ) : row.diffDays === 0 ? (
+                                            <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold">Acaba Hoje</span>
+                                        ) : (
+                                            <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Acaba em {row.diffDays} dia(s)</span>
+                                        )}
+                                    </td>
+                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {row.users?.cpf}</span></td>
+                                    <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
+                                    <td className="p-3 text-gray-600">{row.dataPrevista.toLocaleDateString('pt-BR')}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function FarmaciaPacientes({ cnes }: { cnes: string }) {
+    const [searchCpf, setSearchCpf] = useState('');
+    const [patient, setPatient] = useState<any>(null);
+    const [patientMeds, setPatientMeds] = useState<any[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [loadingMeds, setLoadingMeds] = useState(false);
+    const [error, setError] = useState('');
+    const [editingMed, setEditingMed] = useState<string | null>(null);
+    const [editFrequencyLabel, setEditFrequencyLabel] = useState('');
+    const [editStartTime, setEditStartTime] = useState('');
+    const [editQuantity, setEditQuantity] = useState<number | ''>('');
+    const [saving, setSaving] = useState(false);
+
+    const generateTimes = (start: string, label: string) => {
+        if (!start || !label) return start ? [start] : [];
+        const [h, m] = start.split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) return [start];
+        
+        const date = new Date();
+        date.setHours(h, m, 0, 0);
+
+        const times = [start];
+        let freq = 0;
+        if (label === '12/12h') freq = 12;
+        else if (label === '8/8h') freq = 8;
+        else if (label === '6/6h') freq = 6;
+        else if (label === '4/4h') freq = 4;
+
+        if (freq > 0) {
+            for(let i=1; i < (24/freq); i++) {
+                const nextDate = new Date(date.getTime() + freq * i * 3600000);
+                times.push(nextDate.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
+            }
+        }
+        return times;
+    };
+
+    const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, id?: string}>({ isOpen: false });
+    const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+
+    const searchPatient = async () => {
+        if (!searchCpf || !cnes) return;
+        setSearching(true);
+        setError('');
+        setPatient(null);
+        setPatientMeds([]);
+        
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id, cpf, name, diseases')
+                .eq('cpf', searchCpf.replace(/\D/g, ''))
+                .single();
+
+            if (error || !data) {
+                setError('Paciente não encontrado com o CPF informado.');
+            } else {
+                setPatient(data);
+                fetchPatientMeds(data.id);
+            }
+        } catch (err) {
+            setError('Erro ao buscar dados do paciente.');
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    const fetchPatientMeds = async (patientId: string) => {
+        setLoadingMeds(true);
+        const { data } = await supabase
+            .from('medications')
+            .select(`
+                id, stock, frequency, dispensation_id,
+                medicine_dispensations!inner (
+                    id, catalog_id, dispensed_at, dispensed_quantity, frequency_label, scheduled_times,
+                    medicine_catalog (active_principle, strength, form, dispensing_unit)
+                )
+            `)
+            .eq('owner_id', patientId)
+            .eq('medicine_dispensations.ubs_cnes', cnes)
+            .order('created_at', { ascending: false });
+
+        if (data) {
+            setPatientMeds(data);
+        }
+        setLoadingMeds(false);
+    };
+
+    const handleSaveEdit = async (id: string) => {
+        setSaving(true);
+        try {
+            const times = generateTimes(editStartTime, editFrequencyLabel);
+            
+            const { error } = await supabase
+                .from('medications')
+                .update({ stock: editQuantity || 0, frequency: times, updated_at: new Date().toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+            
+            setAlertModal({ isOpen: true, title: 'Sucesso', message: 'Tratamento e estoque atualizados no app do paciente!' });
+            setEditingMed(null);
+            fetchPatientMeds(patient.id);
+        } catch (err: any) {
+            setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao editar: ' + err.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        const id = confirmModal.id;
+        if (!id) return;
+
+        setSaving(true);
+        try {
+            const medInfo = patientMeds.find(m => m.id === id);
+            if (!medInfo) throw new Error('Medicamento não encontrado.');
+
+            const dispId = medInfo.dispensation_id;
+            const catId = medInfo.medicine_dispensations.catalog_id;
+            const qty = medInfo.medicine_dispensations.dispensed_quantity;
+
+            await supabase.from('medications').delete().eq('id', id);
+            await supabase.from('medicine_dispensations').delete().eq('id', dispId);
+
+            const { data: stockData } = await supabase.from('pharmacy_inventory').select('quantity_in_stock').eq('ubs_cnes', cnes).eq('catalog_id', catId).single();
+            if (stockData) {
+                await supabase.from('pharmacy_inventory').update({ 
+                    quantity_in_stock: stockData.quantity_in_stock + qty, last_updated_at: new Date().toISOString()
+                }).eq('ubs_cnes', cnes).eq('catalog_id', catId);
+            }
+            
+            setConfirmModal({ isOpen: false });
+            setAlertModal({ isOpen: true, title: 'Excluído e Estornado', message: 'Tratamento removido do perfil do paciente e quantidade devolvida ao estoque da UBS!' });
+            fetchPatientMeds(patient.id);
+        } catch (err: any) {
+            setConfirmModal({ isOpen: false });
+            setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao estornar: ' + err.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
+            <ConfirmModal 
+                isOpen={confirmModal.isOpen}
+                title="Desfazer Dispensação e Tratamento?"
+                message="Esta ação apagará o medicamento do aplicativo do paciente e devolverá a quantidade que foi retirada de volta para o estoque da sua UBS. (A retidada sumirá do histórico)."
+                confirmText="Sim, Excluir e Estornar"
+                cancelText="Cancelar"
+                onConfirm={handleDelete}
+                onCancel={() => setConfirmModal({ isOpen: false })}
+                loading={saving}
+            />
+            
+            <ConfirmModal 
+                isOpen={alertModal.isOpen}
+                title={alertModal.title}
+                message={alertModal.message}
+                isAlert={true}
+                confirmText="Entendi"
+                onConfirm={() => setAlertModal({ isOpen: false, title: '', message: '' })}
+                onCancel={() => {}}
+            />
+
+            <div className="shrink-0 flex items-center gap-3 mb-6">
+                <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><Users size={24} /></div>
+                <div>
+                    <h3 className="text-lg font-semibold">Consultar Paciente</h3>
+                    <p className="text-sm text-gray-500">Busque um paciente para editar as dosagens do aplicativo móvel dele</p>
+                </div>
+            </div>
+
+            <div className="shrink-0 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 w-full max-w-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Paciente (CPF)</label>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        inputMode='numeric'
+                        pattern='[0-9]*'
+                        maxLength={11}
+                        placeholder="Apenas números..."
+                        className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border"
+                        value={searchCpf}
+                        onChange={e => setSearchCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    />
+                    <button
+                        type="button" 
+                        onClick={searchPatient}
+                        disabled={searching || !searchCpf}
+                        className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                    >
+                        <Search size={18} /> {searching ? '...' : 'Buscar'}
+                    </button>
+                </div>
+                {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            </div>
+
+            {patient && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="shrink-0 p-4 bg-teal-50 border border-teal-100 rounded-xl mb-4">
+                        <h4 className="font-bold text-teal-900 text-lg">{patient.name}</h4>
+                        <p className="text-teal-700 text-sm">CPF: {patient.cpf}</p>
+                        {patient.diseases && patient.diseases.length > 0 && (
+                            <div className="flex gap-2 flex-wrap mt-2">
+                                {patient.diseases.map((cond: string) => (
+                                    <span key={cond} className="px-2 py-1 bg-teal-200 text-teal-800 text-xs font-bold rounded-full">
+                                        {cond}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <h5 className="shrink-0 font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <Pill size={18}/> Lista Ativa do Aplicativo
+                    </h5>
+
+                    {loadingMeds ? (
+                        <p className="text-gray-500 text-sm italic shrink-0">Carregando plano terapêutico...</p>
+                    ) : patientMeds.length === 0 ? (
+                        <p className="text-gray-500 text-sm italic shrink-0">Nenhum medicamento ativo encontrado para este paciente nesta UBS.</p>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto min-h-0 pr-2 grid gap-3 content-start">
+                            {patientMeds.map(med => {
+                                const isEditing = editingMed === med.id;
+                                const oDisp = med.medicine_dispensations;
+                                const oCat = oDisp.medicine_catalog;
+
+                                return (
+                                    <div key={med.id} className="p-4 border border-gray-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <p className="font-bold text-gray-900">{oCat.active_principle} <span className="font-normal text-gray-500 text-sm">({oCat.strength} • {oCat.form})</span></p>
+                                            
+                                            {isEditing ? (
+                                                <div className="mt-3 flex flex-col gap-3">
+                                                    <div className="flex flex-col sm:flex-row gap-3">
+                                                        <div>
+                                                            <span className="block text-xs font-medium text-gray-500 mb-1">Saldo App (Estoque Paciente)</span>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" 
+                                                                className="w-full sm:w-28 px-2 py-1.5 text-sm border border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none rounded bg-white" 
+                                                                value={editQuantity}
+                                                                onChange={e => setEditQuantity(e.target.value === '' ? '' : parseInt(e.target.value))}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <span className="block text-xs font-medium text-gray-500 mb-1">Frequência Diária</span>
+                                                            <select
+                                                                className="w-full sm:w-36 px-2 py-1.5 text-sm border border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none rounded bg-white"
+                                                                value={editFrequencyLabel}
+                                                                onChange={e => setEditFrequencyLabel(e.target.value)}
+                                                            >
+                                                                <option value="1x ao dia">1x ao dia</option>
+                                                                <option value="12/12h">12/12h</option>
+                                                                <option value="8/8h">8/8h</option>
+                                                                <option value="6/6h">6/6h</option>
+                                                                <option value="4/4h">4/4h</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <span className="block text-xs font-medium text-gray-500 mb-1">1º Horário no App</span>
+                                                            <input 
+                                                                type="time"
+                                                                className="w-full sm:w-28 px-2 py-1.5 text-sm border border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none rounded bg-white" 
+                                                                value={editStartTime}
+                                                                onChange={e => setEditStartTime(e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {editStartTime && editFrequencyLabel && (
+                                                        <div className="bg-teal-50 border border-teal-100 p-2 rounded text-xs text-teal-800">
+                                                            <span className="font-semibold">Alarmes no App:</span> {generateTimes(editStartTime, editFrequencyLabel).join(' • ')}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <button 
+                                                            onClick={() => handleSaveEdit(med.id)}
+                                                            disabled={saving || !editStartTime || editQuantity === ''}
+                                                            className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                                                        >Salvar no App</button>
+                                                        <button 
+                                                            onClick={() => setEditingMed(null)}
+                                                            className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 disabled:opacity-50"
+                                                        >Cancelar</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-1 flex flex-col gap-1">
+                                                    <p className="text-teal-700 font-medium text-sm">
+                                                        {med.frequency?.length ? `${med.frequency.length}x ao dia` : 'Não especificado'}
+                                                        
+                                                        {med.frequency && Array.isArray(med.frequency) && med.frequency.length > 0 && (
+                                                            <span className="ml-2 px-1.5 py-0.5 bg-teal-100 text-teal-800 rounded text-xs border border-teal-200">
+                                                                {med.frequency.join(' • ')}
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                    <div className="text-gray-500 text-xs mt-1 bg-gray-50 p-2 flex flex-col sm:flex-row gap-2 sm:items-center rounded border border-gray-100 md:w-max">
+                                                        <span><strong>App Paciente:</strong> Restam {med.stock} un.</span>
+                                                        <div className="hidden sm:block w-px h-3 bg-gray-300"></div>
+                                                        <span><strong>Histórico Original:</strong> Retirada de {oDisp.dispensed_quantity} un. em {new Date(oDisp.dispensed_at).toLocaleDateString('pt-BR')} ({oDisp.frequency_label})</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {!isEditing && (
+                                            <div className="flex gap-2 shrink-0">
+                                                <button 
+                                                    onClick={() => { 
+                                                        setEditingMed(med.id);
+                                                        setEditQuantity(med.stock || 0);
+                                                        setEditFrequencyLabel(oDisp.frequency_label || '1x ao dia');
+                                                        setEditStartTime(med.frequency?.[0] || '08:00');
+                                                    }}
+                                                    className="p-2 text-gray-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition"
+                                                    title="Editar Frequência/Saldo no App"
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => setConfirmModal({ isOpen: true, id: med.id })}
+                                                    className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                    title="Desfazer Dispensação (Estornar)"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogSize: number }) {
+    const [stats, setStats] = useState({
+        lowStockItems: 0,
+        dispensationsToday: 0,
+        totalPatientsTreated: 0
+    });
+    const [recentActivies, setRecentActivities] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            if (!cnes) return;
+            setLoading(true);
+
+            // 1. Itens com estoque baixo (< 50)
+            const { count: lowStockCount } = await supabase
+                .from('pharmacy_inventory')
+                .select('*', { count: 'exact', head: true })
+                .eq('ubs_cnes', cnes)
+                .lt('quantity_in_stock', 50);
+
+            // 2. Dispensações Hoje
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const { count: dispTodayCount } = await supabase
+                .from('medicine_dispensations')
+                .select('*', { count: 'exact', head: true })
+                .eq('ubs_cnes', cnes)
+                .gte('dispensed_at', today.toISOString());
+
+            // 3. Resumo total de pacientes atendidos (sem duplicatas)
+            const { data: patData } = await supabase
+                .from('medicine_dispensations')
+                .select('patient_id')
+                .eq('ubs_cnes', cnes);
+            const uniquePatients = new Set(patData?.map(d => d.patient_id)).size;
+
+            // 4. Atividades recentes (últimas 4 retiradas)
+            const { data: recentMsg } = await supabase
+                .from('medicine_dispensations')
+                .select('id, dispensed_at, dispensed_quantity, users!medicine_dispensations_patient_id_fkey(name), medicine_catalog(active_principle, strength)')
+                .eq('ubs_cnes', cnes)
+                .order('dispensed_at', { ascending: false })
+                .limit(4);
+
+            setStats({
+                lowStockItems: lowStockCount || 0,
+                dispensationsToday: dispTodayCount || 0,
+                totalPatientsTreated: uniquePatients || 0
+            });
+            setRecentActivities(recentMsg || []);
+            setLoading(false);
+        };
+
+        fetchDashboardData();
+    }, [cnes]);
+
+    if (loading) {
+        return <p className="text-gray-500 italic py-6">Carregando painel de informações...</p>;
+    }
+
+    return (
+        <div className="flex-1 flex flex-col space-y-6 min-h-0">
+            {/* CARDS DE RESUMO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                    <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><ClipboardList size={24} /></div>
+                    <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Itens no Catálogo</p>
+                        <p className="text-2xl font-bold text-gray-900">{catalogSize}</p>
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                    <div className="p-3 bg-orange-50 text-orange-500 rounded-lg"><TrendingDown size={24} /></div>
+                    <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Abaixo do Estoque</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.lowStockItems}</p>
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><PackageSearch size={24} /></div>
+                    <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Retiradas Hoje</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.dispensationsToday}</p>
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                    <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><Users size={24} /></div>
+                    <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Pacientes Ativos</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalPatientsTreated}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* SEÇÃO INFERIOR: Atividades e Catálogo Resumido */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+                
+                {/* 1. Atividades Recentes */}
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col h-full">
+                    <div className="flex items-center gap-2 mb-4 shrink-0">
+                        <Clock size={20} className="text-gray-400" />
+                        <h3 className="font-bold text-gray-800">Últimas Movimentações</h3>
+                    </div>
+                    {recentActivies.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic p-4 bg-gray-50 rounded-lg text-center">Nenhuma retirada recente registrada.</p>
+                    ) : (
+                        <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-2">
+                            {recentActivies.map(act => (
+                                <div key={act.id} className="flex items-center gap-3 border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                                    <div className="w-2 h-2 rounded-full bg-teal-400"></div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-900">
+                                            {act.users?.name} <span className="font-normal text-gray-500">retirou</span> {act.dispensed_quantity} un <span className="font-normal text-gray-500">de</span> {act.medicine_catalog?.active_principle}
+                                        </p>
+                                        <p className="text-xs text-gray-400 font-medium mt-0.5">
+                                            {new Date(act.dispensed_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Dica Rápida / Informações do Sistema */}
+                <div className="bg-gradient-to-br from-teal-600 to-teal-800 p-6 rounded-xl shadow-sm text-white flex flex-col justify-center h-full min-h-[300px]">
+                    <h3 className="font-bold text-xl mb-2 text-teal-50">Bem-vindo(a) ao Farmácia Mais</h3>
+                    <p className="text-teal-100 text-sm mb-4 leading-relaxed">
+                        Este painel é o coração do controle de suprimentos do sistema Hiperdiário. 
+                        Aproveite as abas acima para repor estoques, validar as receitas e gerenciar o tratamento dos pacientes em tempo real de forma colaborativa com o aplicativo móvel deles.
+                    </p>
+                    <div className="bg-white/10 p-4 rounded-lg flex items-start gap-3 backdrop-blur-sm border border-white/20">
+                        <AlertCircle className="text-teal-100 shrink-0" size={20} />
+                        <p className="text-xs text-teal-50">
+                            <strong>Dica:</strong> Na aba "Pacientes e Tratamentos", você pode alterar as dosagens e horários dos medicamentos. Essas mudanças sincronizam no mesmo instante com o aplicativo do paciente, ajustando os alarmes no celular dele!
+                        </p>
+                    </div>
+                </div>
+
+            </div>
         </div>
     );
 }
@@ -245,7 +921,7 @@ export default function FarmaciaDashboard() {
     const [searching, setSearching] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
-    const [activeTab, setActiveTab] = useState<'inicio'|'estoque'|'historico'>('inicio');
+    const [activeTab, setActiveTab] = useState<'inicio'|'estoque'|'historico'|'monitoramento'|'pacientes'>('inicio');
     const [ubsName, setUbsName] = useState<string>('');
 
     const [selectedPrinciple, setSelectedPrinciple] = useState('');
@@ -275,7 +951,7 @@ export default function FarmaciaDashboard() {
 
     useEffect(() => {
         const fetchMedicines = async () => {
-            const { data, error } = await supabase.from('medicine_catalog').select('*').order('active_principle');
+            const { data } = await supabase.from('medicine_catalog').select('*').order('active_principle');
             if (data) setMedicines(data);
         };
         fetchMedicines();
@@ -372,6 +1048,20 @@ export default function FarmaciaDashboard() {
         }
     };
 
+    // Computa a frequência numérica com base no label selecionado
+    const computedFrequencyPerDay = useMemo(() => {
+        if (usageFrequency === '1x ao dia') return 1;
+        if (usageFrequency === '12/12h') return 2;
+        if (usageFrequency === '8/8h') return 3;
+        if (usageFrequency === '6/6h') return 4;
+        if (usageFrequency === 'Outro' && dispensedRaw) {
+            // Estima com base na quantidade mensal (ex: 90 / 30 = 3)
+            const qty = parseInt(dispensedRaw) || 0;
+            return qty >= 30 ? Math.round(qty / 30) : 1; 
+        }
+        return 1; // Fallback
+    }, [usageFrequency, dispensedRaw]);
+
     const selectedMed = useMemo(() => {
         return medicines.find(m => m.id === selectedMedId) || null;
     }, [medicines, selectedMedId]);
@@ -386,10 +1076,10 @@ export default function FarmaciaDashboard() {
         const boxes = Math.floor(dispensedQuantity / selectedMed.reference_box_qty);
         const remainder = dispensedQuantity % selectedMed.reference_box_qty;
         
-        let text = `${dispensedQuantity} ${selectedMed.dispensing_unit}(s)`;
+        let text = `${dispensedQuantity} ${selectedMed.dispensing_unit}${dispensedQuantity > 1 ? 's' : ''}`;
         if (boxes > 0) {
-            text += ` ➔ Aprox. ${boxes} caixa(s)`;
-            if (remainder > 0) text += ` + ${remainder} unidade(s)`;
+            text += ` ➔ Aprox. ${boxes} caixa${boxes > 1 ? 's' : ''}`;
+            if (remainder > 0) text += ` + ${remainder} unidade${remainder > 1 ? 's' : ''}`;
         }
         return text;
     }, [selectedMed, dispensedQuantity]);
@@ -433,7 +1123,8 @@ export default function FarmaciaDashboard() {
                 p_ubs_cnes: profile?.cnes || '',
                 p_quantity: dispensedQuantity,
                 p_doctor_name: doctorName,
-                p_prescription_date: prescriptionDate
+                p_prescription_date: prescriptionDate,
+                p_frequency_per_day: computedFrequencyPerDay
             });
 
             if (insErr) {
@@ -457,22 +1148,22 @@ export default function FarmaciaDashboard() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
+        <div className="flex flex-col min-h-screen bg-gray-100">
+            <nav className="bg-white shadow px-6 py-4 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3">
                     <Pill className="text-teal-600" size={28} />
                     <h1 className="text-xl font-bold text-gray-800">Painel da Farmácia</h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium hidden sm:inline">Olá, {profile?.nome}</span>
+                    <span className="text-sm text-gray-600 font-medium hidden sm:inline">{profile?.nome}</span>
                     <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer text-sm font-medium">
                         <LogOut size={18} /> Sair
                     </button>
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                <div className="mb-8 flex justify-between items-center">
+            <main className="flex-1 w-full max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col min-h-0">
+                <div className="mb-8 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">Dispensação e Estoque</h2>
                         <p className="mt-1 text-sm text-gray-500">
@@ -487,12 +1178,12 @@ export default function FarmaciaDashboard() {
                     </button>
                 </div>
 
-                <div className="flex border-b border-gray-200 mb-6 space-x-6 overflow-x-auto">
+                <div className="flex border-b border-gray-200 mb-6 space-x-6 overflow-x-auto shrink-0">
                     <button 
                         onClick={() => setActiveTab('inicio')}
                         className={`pb-3 font-medium text-sm border-b-2 transition whitespace-nowrap ${activeTab === 'inicio' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
-                        <div className="flex items-center gap-2"><ClipboardList size={18} /> Catálogo Público</div>
+                        <div className="flex items-center gap-2"><Home size={18} /> Início (Resumo)</div>
                     </button>
                     <button 
                         onClick={() => setActiveTab('estoque')}
@@ -506,48 +1197,37 @@ export default function FarmaciaDashboard() {
                     >
                         <div className="flex items-center gap-2"><History size={18} /> Histórico de Retiradas</div>
                     </button>
+                    <button 
+                        onClick={() => setActiveTab('pacientes')}
+                        className={`pb-3 font-medium text-sm border-b-2 transition whitespace-nowrap ${activeTab === 'pacientes' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                    >
+                        <div className="flex items-center gap-2"><Users size={18} /> Pacientes e Tratamentos</div>
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('monitoramento')}
+                        className={`pb-3 font-medium text-sm border-b-2 transition whitespace-nowrap ${activeTab === 'monitoramento' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                    >
+                        <div className="flex items-center gap-2"><AlertCircle size={18} /> Alerta de Pacientes</div>
+                    </button>
                 </div>
 
-                {activeTab === 'inicio' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-3 bg-teal-50 text-teal-600 rounded-lg">
-                                    <ClipboardList size={24} />
-                                </div>
-                                <h3 className="text-lg font-semibold">Catálogo SUS (Hiperdia)</h3>
-                            </div>
-                            <p className="text-gray-600 text-sm mb-4">
-                                Consulte os medicamentos disponíveis e suas unidades mínimas (ex: cápsulas, frascos, refis).
-                            </p>
-                            <div className="h-64 overflow-y-auto pr-2">
-                                {medicines.length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">Carregando catálogo...</p>
-                                ) : (
-                                    <ul className="divide-y divide-gray-100">
-                                        {medicines.map(m => (
-                                            <li key={m.id} className="py-3 flex justify-between items-center">
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-900">{m.active_principle} {m.strength}</p>
-                                                    <p className="text-xs text-gray-500">{m.form} • {m.category}</p>
-                                                </div>
-                                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                                                    {m.dispensing_unit}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {activeTab === 'estoque' && (
-                    <FarmaciaEstoque cnes={profile?.cnes || ''} catalog={medicines} />
-                )}
-                {activeTab === 'historico' && (
-                    <FarmaciaHistorico cnes={profile?.cnes || ''} />
-                )}
+                <div className="flex-1 flex flex-col min-h-0">
+                    {activeTab === 'inicio' && (
+                        <FarmaciaResumoDashboard cnes={profile?.cnes || ''} catalogSize={medicines.length} />
+                    )}
+                    {activeTab === 'estoque' && (
+                        <FarmaciaEstoque cnes={profile?.cnes || ''} catalog={medicines} />
+                    )}
+                    {activeTab === 'historico' && (
+                        <FarmaciaHistorico cnes={profile?.cnes || ''} />
+                    )}
+                    {activeTab === 'pacientes' && (
+                        <FarmaciaPacientes cnes={profile?.cnes || ''} />
+                    )}
+                    {activeTab === 'monitoramento' && (
+                        <FarmaciaMonitoramento cnes={profile?.cnes || ''} />
+                    )}
+                </div>
 
                 {/* MODAL DE DISPENSAÇÃO */}
                 {isModalOpen && (
@@ -653,7 +1333,7 @@ export default function FarmaciaDashboard() {
 
                                             {/* Forma de Uso */}
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Uso prescrito *</label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Frequência *</label>
                                                 <CustomSelect
                                                     disabled={!selectedStrength}
                                                     options={[
