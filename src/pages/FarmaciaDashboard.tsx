@@ -859,7 +859,7 @@ function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogS
             </div>
 
             {/* SEÇÃO INFERIOR: Atividades e Catálogo Resumido */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
                 
                 {/* 1. Atividades Recentes */}
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col h-full">
@@ -889,18 +889,12 @@ function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogS
                 </div>
 
                 {/* 2. Dica Rápida / Informações do Sistema */}
-                <div className="bg-gradient-to-br from-teal-600 to-teal-800 p-6 rounded-xl shadow-sm text-white flex flex-col justify-center h-full min-h-[300px]">
+                <div className="bg-gradient-to-br from-teal-600 to-teal-800 p-6 rounded-xl shadow-sm text-white flex flex-col h-full min-h-[300px]">
                     <h3 className="font-bold text-xl mb-2 text-teal-50">Bem-vindo(a) ao Farmácia Mais</h3>
-                    <p className="text-teal-100 text-sm mb-4 leading-relaxed">
-                        Este painel é o coração do controle de suprimentos do sistema Hiperdiário. 
+                    <p className="text-teal-100 text-lg mb-4 leading-relaxed">
+                        Este painel é o coração do controle de suprimentos do sistema Hiperdiário. <br/>
                         Aproveite as abas acima para repor estoques, validar as receitas e gerenciar o tratamento dos pacientes em tempo real de forma colaborativa com o aplicativo móvel deles.
                     </p>
-                    <div className="bg-white/10 p-4 rounded-lg flex items-start gap-3 backdrop-blur-sm border border-white/20">
-                        <AlertCircle className="text-teal-100 shrink-0" size={20} />
-                        <p className="text-xs text-teal-50">
-                            <strong>Dica:</strong> Na aba "Pacientes e Tratamentos", você pode alterar as dosagens e horários dos medicamentos. Essas mudanças sincronizam no mesmo instante com o aplicativo do paciente, ajustando os alarmes no celular dele!
-                        </p>
-                    </div>
                 </div>
 
             </div>
