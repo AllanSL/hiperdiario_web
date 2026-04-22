@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn } from 'lucide-react';
@@ -93,9 +93,9 @@ export default function Login() {
                     </div>
 
                     <div className="text-center text-sm pt-4">
-                        <a href="/cadastro" className="font-medium text-green-600 hover:text-green-500">
+                        <Link to="/cadastro" className="font-medium text-green-600 hover:text-green-500">
                             É profissional e não tem acesso? Cadastre-se
-                        </a>
+                        </Link>
                     </div>
                 </form>
             </div>
