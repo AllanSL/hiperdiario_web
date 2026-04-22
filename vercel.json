@@ -1,5 +1,10 @@
 {
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
+  {
+    "rewrites": [
+      { "source": "/api-cnes/(.*)", "destination": "https://apidadosabertos.saude.gov.br/$1" },
+      { "source": "/api-datasus/(.*)", "destination": "https://cnes.datasus.gov.br/$1" },
+      { "source": "\\/(.*)", "destination": "/index.html" }
+    ]
+  }
