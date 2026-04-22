@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import RecepcionistaDashboard from './pages/RecepcionistaDashboard';
@@ -23,7 +23,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path='/' element={<Login />} />
           <Route path='/cadastro' element={<Register />} />
@@ -33,7 +33,7 @@ export default function App() {
           <Route path='/profissional/agenda' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalAgenda /></ProtectedRoute>} />
           <Route path='/profissional/pacientes-dia' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientesDia /></ProtectedRoute>} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
   );
 }
