@@ -74,7 +74,17 @@ export class CnesService {
     }
 
     /**
-     * Busca estabelecimentos de saúde do CNES (apenas UBS = tipo 2 por padrão).
+     * Busca estabelecimentos de saúde do CNES (UBS somente).
+     *
+     * Observações importantes:
+     * - A requisição inclui explicitamente `codigo_tipo_unidade=2` na query string
+     *   para garantir que a API retorne apenas Unidades Básicas de Saúde (UBS). A
+     *   API de dados abertos pode retornar múltiplos tipos (hospitais, clínicas,
+     *   etc.); por isso o parâmetro na query evita resultados indesejados.
+     * - Mantemos também uma checagem local (`e.codigo_tipo_unidade === 2`) como
+     *   camada de segurança caso a API retorne registros mistos.
+     * - Se for necessário suportar outros tipos de estabelecimento no futuro,
+     *   remova o `codigo_tipo_unidade=2` da query e torne o tipo configurável.
      */
     static async buscarEstabelecimentos(codigoUf: number, codigoMunicipio: number, limit = 100): Promise<CnesEstabelecimento[]> {
         let codMunicipioStr = codigoMunicipio.toString();
@@ -82,7 +92,8 @@ export class CnesService {
             codMunicipioStr = codMunicipioStr.substring(0, 6);
         }
 
-        const url = `/api-cnes/cnes/estabelecimentos?codigo_uf=${codigoUf}&codigo_municipio=${codMunicipioStr}&status=1&limit=${limit}&offset=0`;
+        // Sempre filtra por tipo de unidade = 2 (UBS)
+        const url = `/api-cnes/cnes/estabelecimentos?codigo_tipo_unidade=2&codigo_uf=${codigoUf}&codigo_municipio=${codMunicipioStr}&status=1&limit=${limit}&offset=0`;
 
         try {
             const response = await fetch(url);
@@ -91,7 +102,9 @@ export class CnesService {
             const data = await response.json();
             if (!data || !Array.isArray(data.estabelecimentos)) return [];
 
-            return data.estabelecimentos.filter((e: any) => e.codigo_tipo_unidade === 2).map((e: any) => {
+            return data.estabelecimentos
+                .filter((e: any) => e.codigo_tipo_unidade === 2)
+                .map((e: any) => {
                 const nome = (e.nome_fantasia || '').trim();
                 const rua = (e.endereco_estabelecimento || '').trim();
                 const numero = (e.numero_estabelecimento || '').trim();

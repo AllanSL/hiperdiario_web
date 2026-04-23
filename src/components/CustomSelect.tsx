@@ -29,8 +29,8 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
         ? options
         : options.filter((opt) => opt.label.toLowerCase().includes(query.toLowerCase()));
 
-    // OpÃ§Ã£o extra para o "placeholder" (limpar seleÃ§Ã£o)
-    const allOptions = [{ value: '', label: placeholder }, ...filteredOptions];
+    // Não incluir o placeholder nas opções; placeholder só aparece no input quando não há seleção.
+    const allOptions = filteredOptions;
 
     // Fecha o dropdown se clicar fora
     useEffect(() => {
@@ -134,7 +134,7 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
             </div>
 
             {open && !disabled && (
-                <ul ref={listRef} className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-[40vh] rounded-lg py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
+                <ul ref={listRef} className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-[35vh] rounded-lg py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
                 {filteredOptions.length === 0 ? (
                     <li className="relative py-2.5 pl-3 pr-9 text-gray-500 select-none text-base font-normal">Nenhuma opção encontrada...</li>
                 ) : (

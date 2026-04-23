@@ -9,6 +9,7 @@ import { CustomSelect } from '../components/CustomSelect';
 
 export default function Register() {
     const [cpf, setCpf] = useState('');
+    const [cpfError, setCpfError] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -30,6 +31,58 @@ export default function Register() {
     const [crmCrf, setCrmCrf] = useState('');
 
     const navigate = useNavigate();
+
+    // --- CPF helpers: máscara, limitação e validação ---
+    const onlyDigits = (v: string) => v.replace(/\D/g, '');
+
+    const formatCPF = (v: string) => {
+        const d = onlyDigits(v).slice(0, 11);
+        if (d.length <= 3) return d;
+        if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+        if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+        return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9,11)}`;
+    };
+
+    const isValidCPF = (v: string) => {
+        const cpfNum = onlyDigits(v);
+        if (cpfNum.length !== 11) return false;
+        if (/^(\d)\1{10}$/.test(cpfNum)) return false; // rejeita sequências iguais
+
+        const nums = cpfNum.split('').map(n => parseInt(n, 10));
+
+        let sum = 0;
+        for (let i = 0; i < 9; i++) sum += nums[i] * (10 - i);
+        let rev = sum % 11;
+        const dig1 = rev < 2 ? 0 : 11 - rev;
+        if (dig1 !== nums[9]) return false;
+
+        sum = 0;
+        for (let i = 0; i < 10; i++) sum += nums[i] * (11 - i);
+        rev = sum % 11;
+        const dig2 = rev < 2 ? 0 : 11 - rev;
+        if (dig2 !== nums[10]) return false;
+
+        return true;
+    };
+
+    const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setCpf(formatCPF(e.target.value));
+        if (cpfError) setCpfError('');
+    };
+
+    const validateCpf = () => {
+        const digits = onlyDigits(cpf);
+        if (!digits || digits.length === 0) {
+            setCpfError('CPF obrigatório');
+            return false;
+        }
+        if (digits.length !== 11 || !isValidCPF(digits)) {
+            setCpfError('CPF inválido');
+            return false;
+        }
+        setCpfError('');
+        return true;
+    };
 
     const handleBuscarEstabelecimentos = async () => {
         if (!uf || !municipio) return;
@@ -66,6 +119,12 @@ export default function Register() {
         e.preventDefault();
         if (!selectedProfissional || !selectedEstabelecimento) {
             setError('Selecione seu perfil na lista de profissionais do estabelecimento.');
+            return;
+        }
+
+        // Validar CPF antes de prosseguir
+        if (!validateCpf()) {
+            setError('CPF inválido ou incompleto.');
             return;
         }
 
@@ -156,7 +215,7 @@ export default function Register() {
                                         setSelectedEstabelecimento(null);
                                         setSelectedProfissional(null);
                                     }}
-                                    placeholder="-- Selecione --"
+                                    placeholder="Selecione"
                                     options={ufsData.map((estado: any) => ({
                                         value: estado.id_uf,
                                         label: `${estado.sigla} - ${estado.nome}`
@@ -175,7 +234,7 @@ export default function Register() {
                                         setSelectedEstabelecimento(null);
                                         setSelectedProfissional(null);
                                     }}
-                                    placeholder="-- Selecione --"
+                                    placeholder="Selecione"
                                     options={cidadesList.map((cidade: any) => ({
                                         value: cidade.id_municipio,
                                         label: cidade.nome
@@ -200,7 +259,7 @@ export default function Register() {
                                         const est = estabelecimentos.find(est => est.codigoCnes.toString() === val.toString());
                                         if (est) handleSelectEstabelecimento(est);
                                     }}
-                                    placeholder="-- Escolha --"
+                                    placeholder="Escolha"
                                     options={estabelecimentos.map(est => ({
                                         value: est.codigoCnes,
                                         label: est.nomeFantasia
@@ -218,7 +277,7 @@ export default function Register() {
                                         const prof = profissionais.find(p => `${p.especialidade} - ${p.nome}` === val);
                                         if (prof) setSelectedProfissional(prof);
                                     }}
-                                    placeholder="-- Escolha --"
+                                    placeholder="Escolha"
                                     options={profissionais.map(prof => ({
                                         value: `${prof.especialidade} - ${prof.nome}`,
                                         label: `${prof.especialidade} - ${prof.nome}`
@@ -233,14 +292,20 @@ export default function Register() {
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">CPF</label>
+                                        
                                         <input
                                             type="text"
                                             required
                                             placeholder="Somente números"
                                             value={cpf}
-                                            onChange={(e) => setCpf(e.target.value)}
+                                            onChange={handleCpfChange}
+                                            onBlur={validateCpf}
+                                            maxLength={14}
+                                            inputMode="numeric"
+                                            aria-invalid={!!cpfError}
                                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
                                         />
+                                        {cpfError && <p className="text-red-500 text-sm mt-1">{cpfError}</p>}
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Senha</label>
