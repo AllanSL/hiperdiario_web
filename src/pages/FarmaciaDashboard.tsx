@@ -309,7 +309,12 @@ function FarmaciaHistorico({ cnes }: { cnes: string }) {
                                 <tr key={row.id} className="hover:bg-gray-50 text-sm">
                                     <td className="p-3 text-gray-600 whitespace-nowrap">{new Date(row.dispensed_at).toLocaleString('pt-BR')}</td>
                                     <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.users?.cpf)}</span></td>
-                                    <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
+                                    <td className="p-3 text-teal-700 font-medium">
+                                        {row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}
+                                        {row.med?.stock !== undefined && (
+                                            <div className="text-xs text-gray-500 mt-1">Estoque App: {row.med.stock} {row.medicine_catalog?.dispensing_unit || 'un.'}</div>
+                                        )}
+                                    </td>
                                     <td className="p-3 font-bold text-gray-700">{row.dispensed_quantity} <span className="text-xs font-normal">{row.medicine_catalog?.dispensing_unit}{row.dispensed_quantity > 1 ? 's' : ''}</span></td>
                                     <td className="p-3 text-gray-600">{row.prescribing_doctor}</td>
                                     <td className="p-3 text-center">
@@ -343,34 +348,75 @@ function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
             const fortyFiveDaysAgo = new Date();
             fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
 
-            const { data } = await supabase
+            const { data: dispData } = await supabase
                 .from('medicine_dispensations')
-                .select('id, dispensed_at, users!medicine_dispensations_patient_id_fkey(id, name, cpf), medicine_catalog(active_principle, strength)')
+                .select('id, dispensed_at, dispensed_quantity, frequency_label, users!medicine_dispensations_patient_id_fkey(id, name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
                 .eq('ubs_cnes', cnes)
                 .gte('dispensed_at', fortyFiveDaysAgo.toISOString())
                 .order('dispensed_at', { ascending: false });
 
-            if (data) {
+            let medsData: any[] = [];
+            if (dispData && dispData.length > 0) {
+                const dispIds = dispData.map((d: any) => d.id).filter(Boolean);
+                const { data: meds } = await supabase
+                    .from('medications')
+                    .select('id, owner_id, stock, frequency, dispensation_id')
+                    .in('dispensation_id', dispIds);
+                medsData = meds || [];
+            }
+
+            if (dispData) {
                 const grouped = new Map();
                 const hoje = new Date();
                 hoje.setHours(0,0,0,0);
-                
-                data.forEach((item: any) => {
+
+                dispData.forEach((item: any) => {
                     const key = `${item.users?.id}-${item.medicine_catalog?.active_principle}`;
                     if (!grouped.has(key)) {
-                        const dispensedDate = new Date(item.dispensed_at);
-                        const dataPrevista = new Date(dispensedDate);
-                        dataPrevista.setDate(dataPrevista.getDate() + 30); // Padrão 30 dias
-                        
-                        const diffTime = dataPrevista.getTime() - hoje.getTime();
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        const med = medsData.find(m => m.dispensation_id === item.id);
 
-                        if (diffDays <= 7) {
-                            grouped.set(key, { ...item, dataPrevista, diffDays });
+                        let dataPrevista: Date;
+                        let diffDays: number;
+                        let source = 'dispensation';
+
+                        if (med && med.stock !== undefined && med.stock !== null) {
+                            // Calcular previsão a partir do estoque do app
+                            let dailyDose = 1;
+                            if (Array.isArray(med.frequency) && med.frequency.length > 0) {
+                                dailyDose = med.frequency.length;
+                            } else if (item.frequency_label) {
+                                const label = String(item.frequency_label).toLowerCase();
+                                if (label.includes('12')) dailyDose = 2;
+                                else if (label.includes('8')) dailyDose = 3;
+                                else if (label.includes('6')) dailyDose = 4;
+                                else dailyDose = 1;
+                            }
+                            if (dailyDose <= 0) dailyDose = 1;
+
+                            const stockNum = Number(med.stock) || 0;
+                            const daysLeft = Math.ceil(stockNum / dailyDose);
+                            dataPrevista = new Date(hoje.getTime() + daysLeft * 24 * 60 * 60 * 1000);
+                            diffDays = daysLeft;
+                            source = 'medications';
+                        } else {
+                            // Fallback: usar dispensed_at + 30 dias
+                            const dispensedDate = new Date(item.dispensed_at);
+                            dataPrevista = new Date(dispensedDate);
+                            dataPrevista.setDate(dataPrevista.getDate() + 30);
+                            const diffTime = dataPrevista.getTime() - hoje.getTime();
+                            diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        }
+
+                        // Critério para exibir: dentro do limiar (7 dias) OU estoque baixo no app
+                        const includeThreshold = 7;
+                        const lowStockThreshold = 5;
+                        const isLowStock = med && (Number(med.stock) <= lowStockThreshold);
+                        if (diffDays <= includeThreshold || isLowStock) {
+                            grouped.set(key, { ...item, dataPrevista, diffDays, source, med });
                         }
                     }
                 });
-                
+
                 setPatients(Array.from(grouped.values()).sort((a, b) => a.diffDays - b.diffDays));
             }
             setLoading(false);
