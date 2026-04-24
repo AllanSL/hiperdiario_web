@@ -562,15 +562,28 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         setSaving(true);
         try {
             const times = generateTimes(editStartTime, editFrequencyLabel);
-            
-            const { error } = await supabase
+
+            const medInfo = patientMeds.find(m => m.id === id);
+            if (!medInfo) throw new Error('Medicamento não encontrado.');
+
+            const { error: medError } = await supabase
                 .from('medications')
                 .update({ stock: editQuantity || 0, frequency: times, updated_at: new Date().toISOString() })
                 .eq('id', id);
 
-            if (error) throw error;
-            
-            setAlertModal({ isOpen: true, title: 'Sucesso', message: 'Tratamento e estoque atualizados no app do paciente!' });
+            if (medError) throw medError;
+
+            // Atualiza também o label e os horários no histórico de dispensação
+            const dispId = medInfo.dispensation_id || medInfo.medicine_dispensations?.id;
+            if (dispId) {
+                const { error: dispError } = await supabase
+                    .from('medicine_dispensations')
+                    .update({ frequency_label: editFrequencyLabel, scheduled_times: times })
+                    .eq('id', dispId);
+                if (dispError) throw dispError;
+            }
+
+            setAlertModal({ isOpen: true, title: 'Sucesso', message: 'Estoque e histórico atualizados!' });
             setEditingMed(null);
             fetchPatientMeds(patient.id);
         } catch (err: any) {
@@ -589,26 +602,16 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
             const medInfo = patientMeds.find(m => m.id === id);
             if (!medInfo) throw new Error('Medicamento não encontrado.');
 
-            const dispId = medInfo.dispensation_id;
-            const catId = medInfo.medicine_dispensations.catalog_id;
-            const qty = medInfo.medicine_dispensations.dispensed_quantity;
+            // Apenas remover a linha do app (tabela `medications`).
+            const { error } = await supabase.from('medications').delete().eq('id', id);
+            if (error) throw error;
 
-            await supabase.from('medications').delete().eq('id', id);
-            await supabase.from('medicine_dispensations').delete().eq('id', dispId);
-
-            const { data: stockData } = await supabase.from('pharmacy_inventory').select('quantity_in_stock').eq('ubs_cnes', cnes).eq('catalog_id', catId).single();
-            if (stockData) {
-                await supabase.from('pharmacy_inventory').update({ 
-                    quantity_in_stock: stockData.quantity_in_stock + qty, last_updated_at: new Date().toISOString()
-                }).eq('ubs_cnes', cnes).eq('catalog_id', catId);
-            }
-            
             setConfirmModal({ isOpen: false });
-            setAlertModal({ isOpen: true, title: 'Excluído e Estornado', message: 'Tratamento removido do perfil do paciente e quantidade devolvida ao estoque da UBS!' });
+            setAlertModal({ isOpen: true, title: 'Removido', message: 'Medicamento removido do app do paciente.' });
             fetchPatientMeds(patient.id);
         } catch (err: any) {
             setConfirmModal({ isOpen: false });
-            setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao estornar: ' + err.message });
+            setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao remover: ' + err.message });
         } finally {
             setSaving(false);
         }
@@ -618,9 +621,9 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
             <ConfirmModal 
                 isOpen={confirmModal.isOpen}
-                title="Desfazer Dispensação e Tratamento?"
-                message="Esta ação apagará o medicamento do aplicativo do paciente e devolverá a quantidade que foi retirada de volta para o estoque da sua UBS. (A retidada sumirá do histórico)."
-                confirmText="Sim, Excluir e Estornar"
+                title="Remover medicamento do App?"
+                message="Esta ação removerá o medicamento apenas do aplicativo do paciente. Não alterará o histórico de dispensação nem o estoque da UBS."
+                confirmText="Sim, remover"
                 cancelText="Cancelar"
                 onConfirm={handleDelete}
                 onCancel={() => setConfirmModal({ isOpen: false })}
@@ -712,7 +715,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                 <div className="mt-3 flex flex-col gap-3">
                                                     <div className="flex flex-col sm:flex-row gap-3">
                                                         <div>
-                                                            <span className="block text-xs font-medium text-gray-500 mb-1">Saldo App (Estoque Paciente)</span>
+                                                            <span className="block text-xs font-medium text-gray-500 mb-1">Estoque Paciente</span>
                                                             <input 
                                                                 type="number" 
                                                                 min="0" 
@@ -801,7 +804,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                 <button 
                                                     onClick={() => setConfirmModal({ isOpen: true, id: med.id })}
                                                     className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                                    title="Desfazer Dispensação (Estornar)"
+                                                    title="Remover do App do Paciente"
                                                 >
                                                     <Trash2 size={18} />
                                                 </button>
