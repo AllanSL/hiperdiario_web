@@ -5,6 +5,16 @@ import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, Ch
 import { CustomSelect } from '../components/CustomSelect';
 import { ConfirmModal } from '../components/ConfirmModal';
 
+function formatCpf(cpf?: string | number | null) {
+    if (cpf === undefined || cpf === null) return '';
+    const s = String(cpf).replace(/\D/g, '');
+    if (!s) return '';
+    if (s.length <= 3) return s;
+    if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
+    if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+    return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
 interface Medicine {
     id: string;
     active_principle: string;
@@ -298,7 +308,7 @@ function FarmaciaHistorico({ cnes }: { cnes: string }) {
                             {history.map(row => (
                                 <tr key={row.id} className="hover:bg-gray-50 text-sm">
                                     <td className="p-3 text-gray-600 whitespace-nowrap">{new Date(row.dispensed_at).toLocaleString('pt-BR')}</td>
-                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {row.users?.cpf}</span></td>
+                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.users?.cpf)}</span></td>
                                     <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
                                     <td className="p-3 font-bold text-gray-700">{row.dispensed_quantity} <span className="text-xs font-normal">{row.medicine_catalog?.dispensing_unit}{row.dispensed_quantity > 1 ? 's' : ''}</span></td>
                                     <td className="p-3 text-gray-600">{row.prescribing_doctor}</td>
@@ -401,7 +411,7 @@ function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
                                             <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Acaba em {row.diffDays} dia(s)</span>
                                         )}
                                     </td>
-                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {row.users?.cpf}</span></td>
+                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.users?.cpf)}</span></td>
                                     <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
                                     <td className="p-3 text-gray-600">{row.dataPrevista.toLocaleDateString('pt-BR')}</td>
                                 </tr>
@@ -492,7 +502,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                     medicine_catalog (active_principle, strength, form, dispensing_unit)
                 )
             `)
-            .eq('owner_id', patientId)
+            .eq('medicine_dispensations.patient_id', patientId)
             .eq('medicine_dispensations.ubs_cnes', cnes)
             .order('created_at', { ascending: false });
 
@@ -591,7 +601,10 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
 
             <div className="shrink-0 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 w-full max-w-lg">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Paciente (CPF)</label>
-                <div className="flex gap-2">
+                <form
+                    onSubmit={(e) => { e.preventDefault(); if (!searching && searchCpf) searchPatient(); }}
+                    className="flex gap-2"
+                >
                     <input
                         type="text"
                         inputMode='numeric'
@@ -603,14 +616,13 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                         onChange={e => setSearchCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
                     />
                     <button
-                        type="button" 
-                        onClick={searchPatient}
+                        type="submit" 
                         disabled={searching || !searchCpf}
                         className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
                     >
                         <Search size={18} /> {searching ? '...' : 'Buscar'}
                     </button>
-                </div>
+                </form>
                 {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             </div>
 
@@ -618,7 +630,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                 <div className="flex-1 flex flex-col min-h-0">
                     <div className="shrink-0 p-4 bg-teal-50 border border-teal-100 rounded-xl mb-4">
                         <h4 className="font-bold text-teal-900 text-lg">{patient.name}</h4>
-                        <p className="text-teal-700 text-sm">CPF: {patient.cpf}</p>
+                        <p className="text-teal-700 text-sm">CPF: {formatCpf(patient.cpf)}</p>
                         {patient.diseases && patient.diseases.length > 0 && (
                             <div className="flex gap-2 flex-wrap mt-2">
                                 {patient.diseases.map((cond: string) => (
@@ -720,7 +732,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                     <div className="text-gray-500 text-xs mt-1 bg-gray-50 p-2 flex flex-col sm:flex-row gap-2 sm:items-center rounded border border-gray-100 md:w-max">
                                                         <span><strong>App Paciente:</strong> Restam {med.stock} un.</span>
                                                         <div className="hidden sm:block w-px h-3 bg-gray-300"></div>
-                                                        <span><strong>Histórico Original:</strong> Retirada de {oDisp.dispensed_quantity} un. em {new Date(oDisp.dispensed_at).toLocaleDateString('pt-BR')} ({oDisp.frequency_label})</span>
+                                                        <span><strong>Histórico Original:</strong> Retirada de {oDisp.dispensed_quantity} un. em {new Date(oDisp.dispensed_at).toLocaleDateString('pt-BR')}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1262,6 +1274,12 @@ export default function FarmaciaDashboard() {
                                                         const numericVal = e.target.value.replace(/\D/g, '').slice(0, 11);
                                                         setSearchCpf(numericVal);
                                                     }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            if (!searching && searchCpf) searchPatient();
+                                                        }
+                                                    }}
                                                 />
                                                 <button
                                                     type="button" 
@@ -1277,7 +1295,8 @@ export default function FarmaciaDashboard() {
                                                     <div className="flex items-center gap-2">
                                                         <CheckCircle size={18} />
                                                         <span className="font-medium">{patient.name}</span>
-                                                        <span className="text-sm opacity-80">(CPF: {patient.cpf || searchCpf})</span>
+                                                        {/* Aplicar máscara ao CPF */}
+                                                        <span className="text-sm opacity-80">(CPF: {formatCpf(patient.cpf || searchCpf)})</span>
                                                     </div>
                                                     
                                                     {/* Mostrar bagdes das condições do paciente */}
