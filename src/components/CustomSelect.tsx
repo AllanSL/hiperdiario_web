@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect, type FocusEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -20,10 +20,17 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
     const [focusedIndex, setFocusedIndex] = useState(-1);
     
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
 
     const selectedLabel = options.find((o) => o.value === value)?.label || '';
-
+    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+        if (wrapperRef.current && !wrapperRef.current.contains(e.relatedTarget as Node)) {
+            setOpen(false);
+            setQuery('');
+            setFocusedIndex(-1);
+        }
+    };
     // Filtra as opÃ§Ãµes
     const filteredOptions = query === ''
         ? options
@@ -102,7 +109,7 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
     };
 
     return (
-        <div className="relative" ref={wrapperRef}>
+        <div className="relative" ref={wrapperRef} onBlur={handleBlur} tabIndex={-1}>
             <div className="relative w-full">
                 <input
                     type="text"
@@ -111,20 +118,22 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
                     placeholder={selectedLabel || placeholder}
                     value={open ? query : selectedLabel}
                     onFocus={() => { setOpen(true); setQuery(''); setFocusedIndex(-1); }}
-                    onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
+                        onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
                     onKeyDown={handleKeyDown}
+                    ref={inputRef}
                 />
                 <button
                     type="button"
-                    tabIndex={-1}
                     disabled={disabled}
                     className="absolute inset-y-0 right-0 flex items-center pr-3 disabled:cursor-not-allowed"
                     onClick={() => {
                         if (!disabled) {
-                            setOpen(!open);
-                            if (!open) {
+                            const nextOpen = !open;
+                            setOpen(nextOpen);
+                            if (nextOpen) {
                                 setQuery('');
                                 setFocusedIndex(-1);
+                                inputRef.current?.focus();
                             }
                         }
                     }}
