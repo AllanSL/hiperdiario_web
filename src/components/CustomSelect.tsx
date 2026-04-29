@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, type FocusEvent } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {

@@ -85,7 +85,6 @@ export default function ProfissionalPacientesDia() {
                         ) : (
                             <ul className="divide-y divide-gray-200">
                                 {pacientes.map((apt) => {
-                                    const aptDate = new Date(apt.date_time);
                                     return (
                                         <li key={apt.id}>
                                             <div className="px-4 py-4 sm:px-6 hover:bg-gray-50 transition">
