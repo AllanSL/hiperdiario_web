@@ -111,7 +111,7 @@ export default function ProfissionalPacientesDia() {
                                                         <div className="flex items-center gap-4">
                                                             <div className="flex items-center">
                                                                 <Clock className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                                                                Hoje às {aptDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                                Agendado para hoje (ordem de chegada)
                                                             </div>
                                                             {apt.location && (
                                                                 <div className="flex items-center">

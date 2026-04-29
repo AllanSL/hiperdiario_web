@@ -12,12 +12,25 @@ export default function ProfissionalAgenda() {
     const [blockedTimes, setBlockedTimes] = useState<any[]>([]);
     const [horariosUbs, setHorariosUbs] = useState<CnesHorario[]>([]);
     const [loading, setLoading] = useState(true);
+    const [ubsName, setUbsName] = useState('');
+    const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
     
     const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
+    useEffect(() => {
+        if (!notification) return;
+
+        const timeout = window.setTimeout(() => {
+            setNotification(null);
+        }, 5000);
+
+        return () => window.clearTimeout(timeout);
+    }, [notification]);
+
     // Modal state
     const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+    const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
     const [blockForm, setBlockForm] = useState({
         date: '',
         location: '',
@@ -25,9 +38,8 @@ export default function ProfissionalAgenda() {
         professionalName: profile?.nome || '',
         reason: ''
     });
-    const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
-    const [blockFullDay, setBlockFullDay] = useState(false);
     const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
+    const [isSubmittingUnblock, setIsSubmittingUnblock] = useState(false);
 
     useEffect(() => {
         if (profile?.id) {
@@ -39,6 +51,33 @@ export default function ProfissionalAgenda() {
             }
         }
     }, [profile, currentMonth]);
+
+    useEffect(() => {
+        if (!profile?.cnes) return;
+
+        const fetchUbsName = async () => {
+            const { data } = await supabase
+                .from('cnes_establishments')
+                .select('name')
+                .eq('cnes_id', profile.cnes)
+                .single();
+
+            if (data?.name) {
+                setUbsName(data.name);
+            }
+        };
+
+        fetchUbsName().catch(console.error);
+    }, [profile?.cnes]);
+
+    useEffect(() => {
+        if (!profile) return;
+        setBlockForm(prev => ({
+            ...prev,
+            professionalName: profile.nome || prev.professionalName,
+            specialty: prev.specialty || profile.especialidade || prev.specialty,
+        }));
+    }, [profile]);
 
     const fetchAgendaParaOMes = async (monthDate: Date) => {
         try {
@@ -68,12 +107,12 @@ export default function ProfissionalAgenda() {
             if (aptError) throw aptError;
             setAppointments(aptData || []);
 
-            // Set initial defaults for the block form based on the first appointment
-            if (aptData && aptData.length > 0 && !blockForm.location) {
+            // Set initial defaults for the block form based on profile or the first appointment
+            if (aptData && aptData.length > 0 && (!blockForm.location || !blockForm.specialty)) {
                 setBlockForm(prev => ({
                     ...prev,
-                    location: aptData[0].location || '',
-                    specialty: aptData[0].specialty || ''
+                    location: aptData[0].location || prev.location || '',
+                    specialty: prev.specialty || profile?.especialidade || aptData[0].specialty || ''
                 }));
             }
 
@@ -113,15 +152,6 @@ export default function ProfissionalAgenda() {
     const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
     const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
 
-    const selectedDateAppointments = useMemo(() => {
-        return appointments.filter(apt => {
-            const aptDate = new Date(apt.date_time);
-            return aptDate.getDate() === selectedDate.getDate() &&
-                   aptDate.getMonth() === selectedDate.getMonth() &&
-                   aptDate.getFullYear() === selectedDate.getFullYear();
-        });
-    }, [appointments, selectedDate]);
-
     const selectedDateBlocks = useMemo(() => {
         return blockedTimes.filter(blk => {
             const blkDate = new Date(blk.date_time);
@@ -131,86 +161,49 @@ export default function ProfissionalAgenda() {
         });
     }, [blockedTimes, selectedDate]);
 
-    const availableTimeOptions = useMemo(() => {
-        if (!blockForm.date) return [];
+    const getScheduleForDate = (date: Date) => {
+        const daysMapping = ["DOMINGO", "SEGUNDA-FEIRA", "TERCA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SABADO"];
+        const dayName = daysMapping[date.getDay()];
 
-        let d: Date;
-        if (blockForm.date.includes('/')) {
-            const [day, month, year] = blockForm.date.split('/').map(Number);
-            d = new Date(year, month - 1, day);
-        } else {
-            const parts = blockForm.date.split('-').map(Number);
-            d = new Date(parts[0], parts[1] - 1, parts[2]);
-        }
-
-        if (isNaN(d.getTime())) return [];
-        
-        const diasMapping = ["DOMINGO", "SEGUNDA-FEIRA", "TERCA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SABADO"];
-        const diaDaSemanaStr = diasMapping[d.getDay()];
-
-        const normalize = (s: string) => s ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim() : '';
-
-        let horarioDoDia = horariosUbs?.find(h => {
+        const horario = horariosUbs.find(h => {
             if (!h.diaSemana) return false;
-            const hDia = normalize(h.diaSemana);
-            return hDia === diaDaSemanaStr || hDia.includes(diaDaSemanaStr) || h.diaSemana === String(d.getDay() + 1);
+            const normalizedDia = h.diaSemana.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+            return normalizedDia === dayName || normalizedDia.includes(dayName) || h.diaSemana === String(date.getDay() + 1);
         });
 
-        // Graceful fallbacks
-        if (!horarioDoDia && horariosUbs?.length > 0 && horariosUbs[0].diaSemana?.includes('Fallback')) {
-            if (d.getDay() !== 0 && d.getDay() !== 6) {
-                horarioDoDia = horariosUbs[0];
-            }
+        if (!horario || !horario.hrInicioAtendimento || !horario.hrFimAtendimento) {
+            if (date.getDay() === 0 || date.getDay() === 6) return null;
+            return { hrInicioAtendimento: '07:00', hrFimAtendimento: '17:00' };
         }
 
-        // Se CNES falhou ou está mal formatado, garantimos uma alternativa caso o usuário precise bloquear e a array esteja vazia
-        if (!horarioDoDia && d.getDay() !== 0 && d.getDay() !== 6) {
-             horarioDoDia = { diaSemana: diaDaSemanaStr, hrInicioAtendimento: '07:00', hrFimAtendimento: '17:00' };
-        }
+        return horario;
+    };
 
-        if (!horarioDoDia || !horarioDoDia.hrInicioAtendimento || !horarioDoDia.hrFimAtendimento) {
-            return [];
-        }
+    const getCapacityForDate = (date: Date) => {
+        const schedule = getScheduleForDate(date);
+        if (!schedule) return 0;
 
-        const inicio = horarioDoDia.hrInicioAtendimento.substring(0, 5);
-        const fim = horarioDoDia.hrFimAtendimento.substring(0, 5);
+        const parse = (timeStr: string) => {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        };
 
-        const opts = [];
-        let [curH, curM] = inicio.split(':').map(Number);
-        const [endH, endM] = fim.split(':').map(Number);
+        const startMinutes = parse(schedule.hrInicioAtendimento.substring(0, 5));
+        const endMinutes = parse(schedule.hrFimAtendimento.substring(0, 5));
+        const totalMinutes = Math.max(0, endMinutes - startMinutes);
+        return Math.floor(totalMinutes / 30);
+    };
 
-        while (curH < endH || (curH === endH && curM < endM)) {
-            const hs = curH.toString().padStart(2, '0');
-            const ms = curM.toString().padStart(2, '0');
-            const newTimeStr = `${hs}:${ms}`;
-            
-            // Check se o slot já está bloqueado ou com agendamento
-            const isOccupied = [...appointments, ...blockedTimes].some(evt => {
-                const eDate = new Date(evt.date_time);
-                // Valida o YYYY-MM-DD local independentemente do fuso
-                const eFormattedDate = eDate.getFullYear() + '-' + String(eDate.getMonth() + 1).padStart(2, '0') + '-' + String(eDate.getDate()).padStart(2, '0');
-                const localEvtTime = eDate.getHours().toString().padStart(2, '0') + ':' + eDate.getMinutes().toString().padStart(2, '0');
-                
-                // Aceitar tanto o formato com barra quanto com traço para blockForm.date
-                const targetDate = blockForm.date.includes('/') 
-                    ? blockForm.date.split('/').reverse().join('-') 
-                    : blockForm.date;
+    const selectedDateCapacity = useMemo(() => getCapacityForDate(selectedDate), [selectedDate, horariosUbs]);
 
-                return eFormattedDate === targetDate && localEvtTime === newTimeStr;
-            });
-
-            if (!isOccupied) {
-                opts.push(newTimeStr);
-            }
-            
-            curM += 30;
-            if (curM >= 60) {
-                curM -= 60;
-                curH++;
-            }
-        }
-        return opts;
-    }, [blockForm.date, horariosUbs, appointments, blockedTimes]);
+    const selectedDateAppointments = useMemo(() => {
+        return appointments.filter(apt => {
+            const aptDate = new Date(apt.date_time);
+            return aptDate.getDate() === selectedDate.getDate() &&
+                   aptDate.getMonth() === selectedDate.getMonth() &&
+                   aptDate.getFullYear() === selectedDate.getFullYear();
+        });
+    }, [appointments, selectedDate]);
 
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay(); 
@@ -222,46 +215,75 @@ export default function ProfissionalAgenda() {
     const handleCreateBlock = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        const slotsToProcess = blockFullDay ? availableTimeOptions : selectedTimeSlots;
-        
-        if (slotsToProcess.length === 0) {
-            alert(blockFullDay ? 'Não há horários disponíveis na unidade que possam ser bloqueados nesta data.' : 'Por favor, selecione pelo menos um horário para bloquear.');
+        if (!blockForm.date) {
+            setNotification({ type: 'error', message: 'Por favor, selecione uma data para bloqueio.' });
+            return;
+        }
+
+        const [year, month, day] = blockForm.date.split('-').map(Number);
+        const targetDate = new Date(year, month - 1, day);
+        const blockExists = blockedTimes.some(blk => {
+            const blkDate = new Date(blk.date_time);
+            return blkDate.getDate() === targetDate.getDate() &&
+                   blkDate.getMonth() === targetDate.getMonth() &&
+                   blkDate.getFullYear() === targetDate.getFullYear() &&
+                   blk.professional_name === blockForm.professionalName &&
+                   blk.location === (blockForm.location || 'Não informado') &&
+                   blk.specialty === (blockForm.specialty || '');
+        });
+
+        if (blockExists) {
+            setNotification({ type: 'error', message: 'Já existe um bloqueio para este dia e esta especialidade/profissional. Libere o bloqueio existente antes de criar outro.' });
             return;
         }
 
         try {
             setIsSubmittingBlock(true);
-            const slots = slotsToProcess.map(timeStr => ({
+            const block = {
                 location: blockForm.location || 'Não informado',
-                date_time: new Date(`${blockForm.date}T${timeStr}:00`).toISOString(),
+                date_time: new Date(`${blockForm.date}T00:00:00`).toISOString(),
                 specialty: blockForm.specialty || '',
                 professional_name: blockForm.professionalName,
-                reason: blockForm.reason || 'Horário Bloqueado'
-            }));
+                reason: blockForm.reason || 'Dia Bloqueado'
+            };
 
-            const { error } = await supabase.from('blocked_times').insert(slots);
+            const { error } = await supabase.from('blocked_times').insert([block]);
             if (error) throw error;
 
-            alert('Horários bloqueados com sucesso!');
+            setNotification({ type: 'success', message: 'Dia bloqueado com sucesso!' });
             setIsBlockModalOpen(false);
             fetchAgendaParaOMes(currentMonth);
             
         } catch (err: any) {
             console.error(err);
-            alert('Erro ao bloquear horários: ' + err.message);
+            setNotification({ type: 'error', message: 'Erro ao bloquear o dia: ' + err.message });
         } finally {
             setIsSubmittingBlock(false);
         }
     };
 
-    const handleDeleteBlock = async (id: string) => {
-        if (!confirm('Deseja realmente liberar este horário?')) return;
+    const handleToggleBlock = async () => {
+        if (selectedDateBlocks.length === 0) {
+            handleOpenBlockModal();
+            return;
+        }
+
+        setIsUnblockModalOpen(true);
+    };
+
+    const confirmUnblockDay = async () => {
         try {
-            const { error } = await supabase.from('blocked_times').delete().eq('id', id);
+            setIsSubmittingUnblock(true);
+            const ids = selectedDateBlocks.map(blk => blk.id);
+            const { error } = await supabase.from('blocked_times').delete().in('id', ids);
             if (error) throw error;
             fetchAgendaParaOMes(currentMonth);
-        } catch (err) {
+            setIsUnblockModalOpen(false);
+        } catch (err: any) {
             console.error(err);
+            setNotification({ type: 'error', message: 'Erro ao liberar o dia: ' + err.message });
+        } finally {
+            setIsSubmittingUnblock(false);
         }
     };
 
@@ -269,23 +291,22 @@ export default function ProfissionalAgenda() {
         const d = selectedDate;
         const formattedDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
         
-        let initialLocation = blockForm.location;
-        let initialSpecialty = blockForm.specialty;
+        let initialLocation = blockForm.location || ubsName || profile?.cnes || '';
+        const initialSpecialty = blockForm.specialty || profile?.especialidade || '';
 
-        // Try getting from appointments if empty
+        // Try getting location from appointments if not available
         if (!initialLocation && appointments.length > 0) {
             initialLocation = appointments[0].location || '';
-            initialSpecialty = appointments[0].specialty || '';
         }
         
         setBlockForm(prev => ({
             ...prev,
             date: formattedDate,
             location: initialLocation,
-            specialty: initialSpecialty
+            specialty: initialSpecialty,
+            professionalName: profile?.nome || prev.professionalName,
+            reason: ''
         }));
-        setSelectedTimeSlots([]);
-        setBlockFullDay(false);
         setIsBlockModalOpen(true);
     };
 
@@ -302,6 +323,14 @@ export default function ProfissionalAgenda() {
             </nav>
 
             <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8 w-full flex-grow">
+                {notification && (
+                    <div className={`mx-auto mb-6 max-w-2xl rounded-lg border px-4 py-3 text-sm shadow ${notification.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : notification.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <p className="flex-1">{notification.message}</p>
+                            <button type="button" onClick={() => setNotification(null)} className="text-current opacity-70 hover:opacity-100">✕</button>
+                        </div>
+                    </div>
+                )}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Componente Calendário */}
                     <div className="bg-white p-4 shadow rounded-lg h-fit">
@@ -355,10 +384,16 @@ export default function ProfissionalAgenda() {
 
                     {/* Lista de Agendamentos do dia */}
                     <div className="bg-white shadow rounded-lg lg:col-span-2 overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                            <h3 className="text-md font-semibold text-gray-800 ">
-                                Consultas e bloqueios: {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </h3>
+                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                            <div>
+                                <h3 className="text-md font-semibold text-gray-800 ">
+                                    Consultas e bloqueios: {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </h3>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    {selectedDateBlocks.length > 0 ? 'Dia bloqueado para atendimento.' : `Atendimentos agendados: ${selectedDateAppointments.length} de ${selectedDateCapacity}`}
+                                    {selectedDateCapacity > 0 && selectedDateAppointments.length >= selectedDateCapacity ? ' — limite atingido' : ''}
+                                </p>
+                            </div>
                             {(() => {
                                 const today = new Date();
                                 today.setHours(0, 0, 0, 0);
@@ -366,11 +401,11 @@ export default function ProfissionalAgenda() {
                                 
                                 return (
                                     <button 
-                                        onClick={handleOpenBlockModal}
+                                        onClick={handleToggleBlock}
                                         disabled={isPastSelected}
-                                        className={`flex items-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded shadow transition text-sm ${isPastSelected ? 'invisible' : 'hover:bg-red-700'}`}>
+                                        className={`flex items-center gap-2 ${selectedDateBlocks.length > 0 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-1.5 rounded shadow transition text-sm ${isPastSelected ? 'invisible' : ''}`}>
                                         <Ban size={16} />
-                                        <span className="hidden sm:inline">Bloquear horários</span>
+                                        <span className="hidden sm:inline">{selectedDateBlocks.length > 0 ? 'Desbloquear dia' : 'Bloquear dia'}</span>
                                     </button>
                                 );
                             })()}
@@ -388,28 +423,17 @@ export default function ProfissionalAgenda() {
                                 <ul className="divide-y divide-gray-200 m-0 p-0">
                                     {/* Mostrar bloqueios primeiro */}
                                     {selectedDateBlocks.map((blk) => {
-                                        const blkDate = new Date(blk.date_time);
                                         return (
                                             <li key={blk.id} className="p-6 hover:bg-red-50 transition bg-red-50/30">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center text-sm font-bold text-red-600">
                                                         <Ban className="mr-2 h-5 w-5 text-red-500" />
-                                                        Horário Bloqueado
-                                                    </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                                            Indisponível
-                                                        </span>
-                                                        <button onClick={() => handleDeleteBlock(blk.id)} className="text-xs text-red-600 underline hover:text-red-800">Liberar</button>
+                                                        Dia Bloqueado
                                                     </div>
                                                 </div>
-                                                <div className="mt-3 flex flex-col gap-2 text-sm text-red-700">
-                                                    <div className="flex items-center font-medium">
-                                                        <Clock className="mr-2 h-4 w-4" />
-                                                        {blkDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                                    </div>
-                                                    {blk.reason && <div className="italic">Motivo: {blk.reason}</div>}
-                                                </div>
+                                                {blk.reason && blk.reason !== 'Dia Bloqueado' ? (
+                                                    <div className="mt-3 text-sm text-red-700 italic">Motivo: {blk.reason}</div>
+                                                ) : null}
                                             </li>
                                         );
                                     })}
@@ -454,7 +478,7 @@ export default function ProfissionalAgenda() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg shadow-xl max-w-lg w-full overflow-hidden">
                         <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                            <h2 className="text-xl font-bold text-gray-800">Bloquear horário</h2>
+                            <h2 className="text-xl font-bold text-gray-800">Bloquear dia</h2>
                             <button onClick={() => setIsBlockModalOpen(false)} className="text-gray-500 hover:text-gray-700">
                                 <X size={24} />
                             </button>
@@ -473,80 +497,29 @@ export default function ProfissionalAgenda() {
                                             onChange={e => setBlockForm({...blockForm, date: e.target.value})}
                                         />
                                     </div>
-                                    <div className="flex items-center mt-0 sm:mt-6">
-                                        <input
-                                            id="blockFullDay"
-                                            type="checkbox"
-                                            checked={blockFullDay}
-                                            onChange={(e) => setBlockFullDay(e.target.checked)}
-                                            className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer"
-                                        />
-                                        <label htmlFor="blockFullDay" className="ml-2 block text-sm text-gray-900 font-medium cursor-pointer">
-                                            Bloquear o dia inteiro
-                                        </label>
-                                    </div>
                                 </div>
-                                {!blockFullDay && (
-                                    <div className="sm:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Selecione os Horários para Bloquear *</label>
-                                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
-                                            {availableTimeOptions.length > 0 ? (
-                                                availableTimeOptions.map(t => {
-                                                    const isSelected = selectedTimeSlots.includes(t);
-                                                    return (
-                                                        <button
-                                                            key={`time-slot-${t}`}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (isSelected) {
-                                                                    setSelectedTimeSlots(prev => prev.filter(slot => slot !== t));
-                                                                } else {
-                                                                    setSelectedTimeSlots(prev => [...prev, t].sort());
-                                                                }
-                                                            }}
-                                                            className={`py-2 px-1 text-sm rounded-md border text-center transition-colors shadow-sm
-                                                                ${isSelected ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-red-50 hover:border-red-300'}
-                                                            `}
-                                                        >
-                                                            {t}
-                                                        </button>
-                                                    );
-                                                })
-                                            ) : (
-                                                <p className="text-sm text-gray-500 col-span-full">Nenhum horário disponível para esta data.</p>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-2">Clique nos blocos de 30m que deseja tornar indisponíveis.</p>
-                                    </div>
-                                )}
                             </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700">Nome do Profissional *</label>
-                                    <input 
-                                        type="text" 
-                                        disabled
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed" 
-                                        value={blockForm.professionalName}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Especialidade / UBS *</label>
-                                    <input 
-                                        type="text" 
-                                        disabled
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed" 
-                                        value={blockForm.specialty}
-                                    />
+                                    <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
+                                        {blockForm.professionalName || 'Não informado'}
+                                    </div>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Local (Unidade) *</label>
+                                    <label className="block text-sm font-medium text-gray-700">Especialidade</label>
+                                    <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
+                                        {blockForm.specialty || 'Não informado'}
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700">Unidade</label>
                                     <input 
                                         type="text" 
                                         disabled
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed" 
-                                        value={blockForm.location}
+                                        value={blockForm.location || 'Não informado'}
                                     />
                                 </div>
                             </div>
@@ -555,7 +528,7 @@ export default function ProfissionalAgenda() {
                                 <label className="block text-sm font-medium text-gray-700">Motivo do Bloqueio</label>
                                 <input 
                                     type="text" 
-                                    placeholder="Ex: Horário de Almoço, Atestado..."
+                                    placeholder="Ex: Feriado, Atestado..."
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border" 
                                     value={blockForm.reason}
                                     onChange={e => setBlockForm({...blockForm, reason: e.target.value})}
@@ -579,6 +552,41 @@ export default function ProfissionalAgenda() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {isUnblockModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full overflow-hidden">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200">
+                            <h2 className="text-xl font-bold text-gray-800">Desbloquear dia</h2>
+                            <button onClick={() => setIsUnblockModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-gray-700">
+                                Tem certeza que deseja liberar o bloqueio para {selectedDate.toLocaleDateString('pt-BR')}?
+                            </p>
+                            <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsUnblockModalOpen(false)}
+                                    className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={confirmUnblockDay}
+                                    disabled={isSubmittingUnblock}
+                                    className="px-4 py-2 text-white bg-yellow-500 hover:bg-yellow-600 rounded-md transition disabled:opacity-50"
+                                >
+                                    {isSubmittingUnblock ? 'Liberando...' : 'Confirmar'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

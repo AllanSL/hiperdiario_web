@@ -8,6 +8,7 @@ type UserProfile = {
     nome: string;
     cnes?: string;
     ibge?: string;
+    especialidade?: string;
 };
 
 type AuthContextType = {

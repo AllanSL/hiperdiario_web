@@ -173,6 +173,7 @@ export default function Register() {
                         crm_crf: crmCrf,
                         ibge: municipio.toString(),
                         cnes: selectedEstabelecimento.codigoCnes.toString(),
+                        especialidade: selectedProfissional.especialidade,
                     });
 
                 if (insertError) throw insertError;
