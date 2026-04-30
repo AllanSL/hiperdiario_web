@@ -35,52 +35,31 @@ Deno.serve(async (req: Request) => {
     
     console.log(`CNES ID Formado: ${cnesId}`)
 
-    // 2. Passo A: Obtenção do Session Cookie
-    const jsessionURL = 'https://cnes.datasus.gov.br/pages/estabelecimentos/consulta.jsp';
-    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    
-    const stepAResponse = await fetch(jsessionURL, {
-      method: 'GET',
-      headers: {
-        'User-Agent': userAgent,
-      }
-    });
-
-// Deno headers usually provide .getSetCookie() for multiple instances of headers
-    const rawCookies = stepAResponse.headers.getSetCookie 
-        ? stepAResponse.headers.getSetCookie() 
-        : (stepAResponse.headers.get('set-cookie') || '').split(','); 
-
-    let sessionCookie = '';
-    if (rawCookies && rawCookies.length > 0) {
-        // Varremos todos os cookies cru da requisição, ex: "JSESSIONID=...; Path=/; Secure" e extrai só a key=value
-        sessionCookie = rawCookies
-            .filter(c => c.trim().length > 0)
-            .map(c => c.split(';')[0].trim())
-            .join('; ');
-        console.log('Cookies de segurança (F5/TS) e sessão extraídos:', sessionCookie);
-    } else {
-        console.warn('Nenhum cookie retornado no passo A, tentando prosseguir...');
-    }
-
-    // 3. Passo B: Buscar de Fato os Horários de Atendimento
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+    const refererUrl = `https://cnes.datasus.gov.br/pages/estabelecimentos/ficha/identificacao/${cnesId}`;
     const fetchDataUrl = `https://cnes.datasus.gov.br/services/estabelecimentos/atendimento/${cnesId}`;
-    
+
     const stepBResponse = await fetch(fetchDataUrl, {
       method: 'GET',
       headers: {
-        'Referer': jsessionURL,
-        'Accept': 'application/json',
+        'Referer': refererUrl,
         'User-Agent': userAgent,
-        'Cookie': sessionCookie
+        'Host': 'cnes.datasus.gov.br'
       }
     });
 
     if (!stepBResponse.ok) {
-        throw new Error(`Falha na API do CNES (Passo B): ${stepBResponse.status} ${stepBResponse.statusText}`);
+        const errorText = await stepBResponse.text();
+        throw new Error(`Falha na API do CNES (Passo B): ${stepBResponse.status} ${stepBResponse.statusText} - ${errorText}`);
     }
 
-    const data = await stepBResponse.json();
+    const dataText = await stepBResponse.text();
+    let data;
+    try {
+      data = JSON.parse(dataText);
+    } catch (parseError) {
+      throw new Error(`Resposta inválida do CNES: ${dataText}`);
+    }
 
     return new Response(
       JSON.stringify(data),

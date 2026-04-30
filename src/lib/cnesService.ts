@@ -30,8 +30,19 @@ export class CnesService {
         try {
             console.log(`[CnesService] Buscando horários via Edge Function para IBGE: ${codigoIbge}, CNES: ${codigoCnes}`);
             
-            const { data, error } = await supabase.functions.invoke('cnes-proxy', {
-                body: { ibge: codigoIbge, cnes: codigoCnes }
+            const sessionResponse = await supabase.auth.getSession();
+            const accessToken = sessionResponse.data.session?.access_token;
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+
+            if (accessToken) {
+                headers.Authorization = `Bearer ${accessToken}`;
+            }
+
+            const { data, error } = await supabase.functions.invoke('cnes_api', {
+                body: JSON.stringify({ ibge: codigoIbge, cnes: codigoCnes }),
+                headers,
             });
 
             if (error) {
