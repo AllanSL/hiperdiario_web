@@ -9,6 +9,7 @@ import FarmaciaDashboard from './pages/FarmaciaDashboard';
 import ProfissionalDashboard from './pages/ProfissionalDashboard';
 import ProfissionalAgenda from './pages/ProfissionalAgenda';
 import ProfissionalPacientesDia from './pages/ProfissionalPacientesDia';
+import ProfissionalPacientes from './pages/ProfissionalPacientes';
 import Register from './pages/Register';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path='/profissional' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalDashboard /></ProtectedRoute>} />
           <Route path='/profissional/agenda' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalAgenda /></ProtectedRoute>} />
           <Route path='/profissional/pacientes-dia' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientesDia /></ProtectedRoute>} />
+          <Route path='/profissional/pacientes' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientes /></ProtectedRoute>} />
         </Routes>
       </HashRouter>
     </AuthProvider>

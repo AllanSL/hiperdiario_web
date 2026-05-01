@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Activity, CalendarCheck, Calendar } from 'lucide-react';
+import { LogOut, Activity, CalendarCheck, Calendar, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfissionalDashboard() {
@@ -114,6 +114,20 @@ export default function ProfissionalDashboard() {
                             </div>
                             <p className="mt-2 text-gray-600 flex-grow">
                                 Visualize sua programação semanal, bloqueie horários e confira retornos.
+                            </p>
+                        </div>
+
+                        {/* Pacientes */}
+                        <div 
+                            onClick={() => navigate('/profissional/pacientes')}
+                            className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-purple-500 cursor-pointer hover:shadow-lg transition"
+                        >
+                            <div className="flex items-center gap-3 mb-2">
+                                <Users className="text-purple-500 h-8 w-8" />
+                                <h2 className="text-lg font-semibold">Pacientes</h2>
+                            </div>
+                            <p className="mt-2 text-gray-600 flex-grow">
+                                Procure e liste pacientes, veja seus medicamentos e edite suas doenças.
                             </p>
                         </div>
                     </div>
