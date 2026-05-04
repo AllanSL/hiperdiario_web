@@ -27,15 +27,21 @@ export default function Login() {
         setError('');
 
         // Assuming CPF format is numbers only and matches a custom email or identity in Supabase 
-        // This usually implies you either authenticate with a custom function or CPF@hiperdiario.com pattern
-        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.com`;
+        // This usually implies you either authenticate with a custom function or CPF@hiperdiario.app pattern
+        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.app`;
 
         const { error } = await supabase.auth.signInWithPassword({
             email: emailFormat,
             password: password,
         });
 
-        if (error) setError(error.message);
+        if (error) {
+            if (error.message === 'Invalid login credentials') {
+                setError('CPF ou senha incorretos. Verifique seus dados.');
+            } else {
+                setError(error.message);
+            }
+        }
         setLoading(false);
     };
 

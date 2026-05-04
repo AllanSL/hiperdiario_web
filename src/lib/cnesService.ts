@@ -14,6 +14,7 @@ export interface CnesEstabelecimento {
 export interface CnesProfissional {
     nome: string;
     especialidade: string;
+    cns: string;
 }
 
 export interface CnesHorario {
@@ -23,6 +24,33 @@ export interface CnesHorario {
 }
 
 export class CnesService {
+    /**
+     * Formata nomes extensos de estabelecimentos para um padrão mais curto (ex: "UBS ...")
+     */
+    static formatCnesDisplayName(name: string): string {
+        if (!name || name.trim() === '') return name;
+        const s = name.trim();
+
+        const patterns = [
+            /^\s*(?:unidade\s+(?:b[aá]sica|basica)(?:\s+de\s+(?:saude|saúde))?)\s*[:\-–—]?\s*/i,
+            /^\s*(?:unidade|unid)\s+([^\s,;:]{1,8})(?:\s+de\s+(?:saude|saúde))?\s*[:\-–—]?\s*/i,
+            /^\s*(?:ubs)\s*[:\-–—]?\s*/i,
+            /^\s*(?:ub)\s*(?:de\s+(?:saude|saúde))?\s*[:\-–—]?\s*/i,
+            /^\s*(?:posto\s+de\s+(?:saude|saúde))\s*[:\-–—]?\s*/i,
+            /^\s*(?:centro\s+de\s+(?:saude|saúde))\s*[:\-–—]?\s*/i,
+        ];
+
+        for (const regex of patterns) {
+            const match = s.match(regex);
+            if (match) {
+                const rest = s.replace(regex, '').trim();
+                return rest === '' ? 'UBS' : `UBS ${rest}`;
+            }
+        }
+
+        return name;
+    }
+
     /**
      * Busca os horários de funcionamento de um estabelecimento no CNES.
      */
@@ -124,7 +152,7 @@ export class CnesService {
 
                 return {
                     codigoCnes: Number(e.codigo_cnes) || 0,
-                    nomeFantasia: nome || 'Estabelecimento sem nome',
+                    nomeFantasia: CnesService.formatCnesDisplayName(nome || 'Estabelecimento sem nome'),
                     endereco: partes,
                     ibgeOriginal: codigoMunicipio, // Guardamos o IBGE original de 7 dígitos
                     latitude: e.latitude_estabelecimento_decimo_grau || null,
@@ -168,8 +196,9 @@ export class CnesService {
                     data.forEach((e: any) => {
                         let cbo = (e.dsCbo || '').trim().toUpperCase();
                         const nome = (e.nome || '').trim();
+                        const cns = (e.cns || '').trim();
 
-                        if (!cbo || !nome) return;
+                        if (!cbo || !nome || !cns) return;
 
                         // Filtro focado nos perfis suportados: Recepcionista, Farmácia e Saúde de nível superior
                         if (
@@ -194,9 +223,9 @@ export class CnesService {
                             if (cbo.startsWith('MEDICO ')) cbo = cbo.replace('MEDICO ', 'MÉDICO ');
                             if (cbo.startsWith('PSICOLOGO ')) cbo = cbo.replace('PSICOLOGO ', 'PSICÓLOGO ');
 
-                            const key = `${nome}-${cbo}`;
+                            const key = `${cns}`;
                             if (!profissionaisMap.has(key)) {
-                                profissionaisMap.set(key, { nome, especialidade: cbo });
+                                profissionaisMap.set(key, { nome, especialidade: cbo, cns });
                             }
                         }
                     });

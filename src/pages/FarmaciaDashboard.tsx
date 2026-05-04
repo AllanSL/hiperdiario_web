@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock } from 'lucide-react';
@@ -197,7 +197,7 @@ function FarmaciaHistorico({ cnes }: { cnes: string }) {
         setLoading(true);
         const { data } = await supabase
             .from('medicine_dispensations')
-            .select('id, catalog_id, dispensed_at, dispensed_quantity, prescribing_doctor, ubs_cnes, users!medicine_dispensations_patient_id_fkey(name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
+            .select('id, catalog_id, dispensed_at, dispensed_quantity, prescribing_doctor, ubs_cnes, patients!medicine_dispensations_patient_id_fkey(name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
             .eq('ubs_cnes', cnes)
             .order('dispensed_at', { ascending: false })
             .limit(50);
@@ -308,7 +308,7 @@ function FarmaciaHistorico({ cnes }: { cnes: string }) {
                             {history.map(row => (
                                 <tr key={row.id} className="hover:bg-gray-50 text-sm">
                                     <td className="p-3 text-gray-600 whitespace-nowrap">{new Date(row.dispensed_at).toLocaleString('pt-BR')}</td>
-                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.users?.cpf)}</span></td>
+                                    <td className="p-3 font-medium text-gray-800">{row.patients?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.patients?.cpf)}</span></td>
                                     <td className="p-3 text-teal-700 font-medium">
                                         {row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}
                                         {row.med?.stock !== undefined && (
@@ -350,7 +350,7 @@ function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
 
             const { data: dispData } = await supabase
                 .from('medicine_dispensations')
-                .select('id, dispensed_at, dispensed_quantity, frequency_label, users!medicine_dispensations_patient_id_fkey(id, name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
+                .select('id, dispensed_at, dispensed_quantity, frequency_label, patients!medicine_dispensations_patient_id_fkey(id, name, cpf), medicine_catalog(active_principle, strength, dispensing_unit)')
                 .eq('ubs_cnes', cnes)
                 .gte('dispensed_at', fortyFiveDaysAgo.toISOString())
                 .order('dispensed_at', { ascending: false });
@@ -371,7 +371,7 @@ function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
                 hoje.setHours(0,0,0,0);
 
                 dispData.forEach((item: any) => {
-                    const key = `${item.users?.id}-${item.medicine_catalog?.active_principle}`;
+                    const key = `${item.patients?.id}-${item.medicine_catalog?.active_principle}`;
                     if (!grouped.has(key)) {
                         const med = medsData.find(m => m.dispensation_id === item.id);
 
@@ -457,7 +457,7 @@ function FarmaciaMonitoramento({ cnes }: { cnes: string }) {
                                             <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">Acaba em {row.diffDays} dia(s)</span>
                                         )}
                                     </td>
-                                    <td className="p-3 font-medium text-gray-800">{row.users?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.users?.cpf)}</span></td>
+                                    <td className="p-3 font-medium text-gray-800">{row.patients?.name}<br/><span className="text-gray-500 text-xs font-normal">CPF: {formatCpf(row.patients?.cpf)}</span></td>
                                     <td className="p-3 text-teal-700 font-medium">{row.medicine_catalog?.active_principle} {row.medicine_catalog?.strength}</td>
                                     <td className="p-3 text-gray-600">{row.dataPrevista.toLocaleDateString('pt-BR')}</td>
                                 </tr>
@@ -519,7 +519,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         
         try {
             const { data, error } = await supabase
-                .from('users')
+                .from('patients')
                 .select('id, cpf, name, diseases')
                 .eq('cpf', searchCpf.replace(/\D/g, ''))
                 .single();
@@ -861,7 +861,7 @@ function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogS
             // 4. Atividades recentes (últimas 4 retiradas)
             const { data: recentMsg } = await supabase
                 .from('medicine_dispensations')
-                .select('id, dispensed_at, dispensed_quantity, users!medicine_dispensations_patient_id_fkey(name), medicine_catalog(active_principle, strength)')
+                .select('id, dispensed_at, dispensed_quantity, patients!medicine_dispensations_patient_id_fkey(name), medicine_catalog(active_principle, strength)')
                 .eq('ubs_cnes', cnes)
                 .order('dispensed_at', { ascending: false })
                 .limit(4);
@@ -1028,7 +1028,7 @@ export default function FarmaciaDashboard() {
         
         try {
             const { data, error } = await supabase
-                .from('users')
+                .from('patients')
                 .select('id, cpf, name, diseases')
                 .eq('cpf', searchCpf.replace(/\D/g, '')) // Limpa CPF
                 .single();

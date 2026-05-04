@@ -42,7 +42,7 @@ export default function ProfissionalAgenda() {
     const [isSubmittingUnblock, setIsSubmittingUnblock] = useState(false);
 
     useEffect(() => {
-        if (profile?.id) {
+        if (profile?.user_id) {
             fetchAgendaParaOMes(currentMonth);
             if (profile.ibge && profile.cnes) {
                 CnesService.buscarHorariosFuncionamento(profile.ibge, profile.cnes)
@@ -97,9 +97,10 @@ export default function ProfissionalAgenda() {
                     notes,
                     location,
                     specialty,
-                    users ( name, cpf )
+                    shift,
+                    patients ( name, cpf )
                 `)
-                .ilike('specialty', `%${profile?.nome}%`)
+                .eq('professional_cns', profile?.cns)
                 .gte('date_time', startDate)
                 .lte('date_time', endDate)
                 .order('date_time', { ascending: true });
@@ -120,7 +121,7 @@ export default function ProfissionalAgenda() {
             const { data: blockData, error: blockError } = await supabase
                 .from('blocked_times')
                 .select('*')
-                .ilike('professional_name', `%${profile?.nome}%`)
+                .eq('professional_cns', profile?.cns)
                 .gte('date_time', startDate)
                 .lte('date_time', endDate)
                 .order('date_time', { ascending: true });
@@ -244,6 +245,7 @@ export default function ProfissionalAgenda() {
                 date_time: new Date(`${blockForm.date}T00:00:00`).toISOString(),
                 specialty: blockForm.specialty || '',
                 professional_name: blockForm.professionalName,
+                professional_cns: profile?.cns,
                 reason: blockForm.reason || 'Dia Bloqueado'
             };
 
@@ -446,8 +448,8 @@ export default function ProfissionalAgenda() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center text-sm font-bold text-indigo-600">
                                                         <User className="mr-2 h-5 w-5 text-gray-400" />
-                                                        {apt.users?.name || 'Paciente não identificado'} 
-                                                        {apt.users?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {apt.users.cpf})</span>}
+                                                        {apt.patients?.name || 'Paciente não identificado'} 
+                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {apt.patients.cpf})</span>}
                                                     </div>
                                                     <div>
                                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(apt.status)}`}>

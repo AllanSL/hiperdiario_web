@@ -144,13 +144,13 @@ export default function RecepcionistaDashboard() {
                         </div>
                         <div className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
                             <h3 className="text-sm font-medium text-gray-600">Contato</h3>
-                            <p className="mt-2 text-base text-gray-900">
+                            <p className="mt-2 text-base font-semibold text-gray-900">
                                 {unitInfoLoading ? 'Carregando...' : unitInfo?.phone ? formatPhone(unitInfo.phone) : 'Não disponível'}
                             </p>
                         </div>
                         <div className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
                             <h3 className="text-sm font-medium text-gray-600">Endereço</h3>
-                            <p className="mt-2 text-base text-gray-900">
+                            <p className="mt-2 text-base font-semibold text-gray-900">
                                 {unitInfoLoading ? 'Carregando...' : unitInfo?.address ? capitalizeText(unitInfo.address) : 'Não disponível'}
                             </p>
                         </div>

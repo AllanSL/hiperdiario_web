@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 type UserProfile = {
-    id: string;
+    cns: string;
+    user_id: string;
     role: 'recepcionista' | 'farmacia' | 'profissional_saude';
     nome: string;
     cnes?: string;
@@ -27,10 +28,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const fetchProfile = async (userId: string) => {
         // Note: Assuming there's a table called 'profissionais' where roles are stored.
         const { data } = await supabase
-            .from('profissionais') // Adjust this table name based on your schema
+            .from('professionals')
             .select('*')
-            .eq('id', userId)
-            .single();
+            .eq('user_id', userId)
+            .maybeSingle();
 
         if (data) {
             setProfile(data as UserProfile);

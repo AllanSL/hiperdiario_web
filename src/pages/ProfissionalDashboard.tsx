@@ -14,7 +14,7 @@ export default function ProfissionalDashboard() {
     const handleLogout = () => supabase.auth.signOut();
 
     useEffect(() => {
-        if (profile?.id) {
+        if (profile?.user_id) {
             fetchDashboardData();
         }
     }, [profile]);
@@ -31,9 +31,10 @@ export default function ProfissionalDashboard() {
                     id, 
                     date_time,
                     status,
-                    users ( name )
-                `) // Relacionamento com a tabela users
-                .ilike('specialty', `%${profile?.nome}%`) // O nome do profissional está contido na coluna specialty
+                    shift,
+                    patients ( name )
+                `)
+                .eq('professional_cns', profile?.cns)
                 .gte('date_time', `${hoje}T00:00:00`)
                 .lte('date_time', `${hoje}T23:59:59`);
 
@@ -98,7 +99,7 @@ export default function ProfissionalDashboard() {
                             </div>
                             <p className="mt-2 text-gray-600 flex-grow">
                                 {atendimentoEmAndamento 
-                                    ? `Atendendo agora: ${atendimentoEmAndamento.users?.name || 'Paciente Atual'}`
+                                    ? `Atendendo agora: ${atendimentoEmAndamento.patients?.name || 'Paciente Atual'}`
                                     : "Nenhum atendimento em andamento no momento."}
                             </p>
                         </div>

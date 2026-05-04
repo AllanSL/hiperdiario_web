@@ -131,7 +131,7 @@ export default function Register() {
         setLoading(true);
         setError('');
 
-        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.com`;
+        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.app`;
         const role = mapEspecialidadeToRole(selectedProfissional.especialidade);
 
         try {
@@ -164,9 +164,10 @@ export default function Register() {
                 }
 
                 const { error: insertError } = await supabase
-                    .from('profissionais')
+                    .from('professionals')
                     .insert({
-                        id: authData.user.id,
+                        user_id: authData.user.id,
+                        cns: selectedProfissional.cns,
                         nome: selectedProfissional.nome,
                         cpf: cpf.replace(/\D/g, ''),
                         role: role,
@@ -182,7 +183,11 @@ export default function Register() {
                 navigate('/');
             }
         } catch (err: any) {
-            setError(err.message || 'Erro ao registrar profissional.');
+            if (err.message === 'User already registered') {
+                setError('Este CPF já possui uma conta cadastrada.');
+            } else {
+                setError(err.message || 'Erro ao registrar profissional.');
+            }
         }
         setLoading(false);
     };

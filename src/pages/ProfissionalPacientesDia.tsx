@@ -11,7 +11,7 @@ export default function ProfissionalPacientesDia() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (profile?.id) {
+        if (profile?.user_id) {
             fetchPacientesDoDia();
         }
     }, [profile]);
@@ -27,11 +27,12 @@ export default function ProfissionalPacientesDia() {
                     id, 
                     date_time,
                     status,
+                    shift,
                     notes,
                     location,
-                    users ( name, cpf )
+                    patients ( name, cpf )
                 `)
-                .ilike('specialty', `%${profile?.nome}%`)
+                .eq('professional_cns', profile?.cns)
                 .gte('date_time', `${hoje}T00:00:00`)
                 .lte('date_time', `${hoje}T23:59:59`)
                 .order('date_time', { ascending: true });
@@ -91,8 +92,8 @@ export default function ProfissionalPacientesDia() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center text-sm text-indigo-600 font-bold truncate">
                                                         <User className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-                                                        {apt.users?.name || 'Paciente não identificado'}
-                                                        {apt.users?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {apt.users.cpf})</span>}
+                                                        {apt.patients?.name || 'Paciente não identificado'}
+                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {apt.patients.cpf})</span>}
                                                     </div>
                                                     <div className="ml-2 flex-shrink-0 flex items-center gap-2">
                                                         <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(apt.status)}`}>

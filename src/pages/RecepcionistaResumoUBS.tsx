@@ -6,7 +6,8 @@ import { CnesService, type CnesHorario } from '../lib/cnesService';
 import { ArrowLeft, Users, Clock3, ChevronDown } from 'lucide-react';
 
 type ProfessionalSummary = {
-  id: string;
+  cns: string;
+  user_id?: string;
   nome: string;
   especialidade?: string;
   crm_crf?: string;
@@ -18,6 +19,7 @@ type AppointmentSummary = {
   date_time: string;
   status?: string;
   professional_name?: string;
+  professional_cns?: string;
   specialty?: string;
   patient_id?: string;
   location?: string;
@@ -61,7 +63,7 @@ export default function RecepcionistaResumoUBS() {
   const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([]);
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
   const [horariosUbs, setHorariosUbs] = useState<CnesHorario[]>([]);
-  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('');
+  const [selectedProfessionalCns, setSelectedProfessionalCns] = useState<string>('');
   const [isProfessionalDropdownOpen, setIsProfessionalDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [horariosLoading, setHorariosLoading] = useState(false);
@@ -86,8 +88,8 @@ export default function RecepcionistaResumoUBS() {
       try {
         const [professionalsResponse, appointmentsResponse] = await Promise.all([
           supabase
-            .from('profissionais')
-            .select('id, nome, especialidade, crm_crf, role')
+            .from('professionals')
+            .select('cns, user_id, nome, especialidade, crm_crf, role')
             .eq('cnes', profile.cnes)
             .order('nome', { ascending: true }),
           supabase
@@ -101,7 +103,15 @@ export default function RecepcionistaResumoUBS() {
         if (professionalsResponse.error) throw professionalsResponse.error;
         if (appointmentsResponse.error) throw appointmentsResponse.error;
 
-        setProfessionals((professionalsResponse.data || []) as ProfessionalSummary[]);
+        // Filtro de ocupações de saúde
+        const healthKeywords = ['MEDICO', 'MÉDICO', 'DENTISTA', 'PSICOLOGO', 'PSICÓLOGO', 'NUTRICIONISTA', 'PSIQUIATRA', 'GINECOLOGISTA', 'FISIOTERAPEUTA'];
+        const isHealthProf = (especialidade: string) => {
+          const upper = especialidade.toUpperCase();
+          return healthKeywords.some(key => upper.includes(key));
+        };
+
+        const filteredProfs = (professionalsResponse.data || []).filter((p: any) => isHealthProf(p.especialidade || ''));
+        setProfessionals(filteredProfs as ProfessionalSummary[]);
         setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
       } catch (err: any) {
         console.error('Erro ao carregar resumo da UBS:', err);
@@ -145,15 +155,15 @@ export default function RecepcionistaResumoUBS() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedProfessional = professionals.find((prof) => prof.id === selectedProfessionalId);
+  const selectedProfessional = professionals.find((prof) => prof.cns === selectedProfessionalCns);
   const filteredAppointments = useMemo(() => {
-    if (!selectedProfessionalId) return appointments;
+    if (!selectedProfessionalCns) return appointments;
     return appointments.filter(
       (appointment) =>
         appointment.professional_name === selectedProfessional?.nome ||
-        appointment.specialty === selectedProfessional?.especialidade,
+        appointment.professional_cns === selectedProfessionalCns,
     );
-  }, [appointments, selectedProfessionalId, selectedProfessional]);
+  }, [appointments, selectedProfessionalCns, selectedProfessional]);
 
   const totalConsultations = filteredAppointments.length;
   const attendedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status).label === 'Compareceu').length;
@@ -231,7 +241,7 @@ export default function RecepcionistaResumoUBS() {
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedProfessionalId('');
+                        setSelectedProfessionalCns('');
                         setIsProfessionalDropdownOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
@@ -242,10 +252,10 @@ export default function RecepcionistaResumoUBS() {
                     <div className="border-t border-gray-200" />
                     {professionals.map((professional) => (
                       <button
-                        key={professional.id}
+                        key={professional.cns}
                         type="button"
                         onClick={() => {
-                          setSelectedProfessionalId(professional.id);
+                          setSelectedProfessionalCns(professional.cns);
                           setIsProfessionalDropdownOpen(false);
                         }}
                         className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
@@ -317,7 +327,7 @@ export default function RecepcionistaResumoUBS() {
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-gray-500">Nenhum profissional encontrado.</div>
               ) : (
                 professionals.map((professional) => (
-                  <div key={professional.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div key={professional.cns} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-gray-800">{professional.nome}</p>

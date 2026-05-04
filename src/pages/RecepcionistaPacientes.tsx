@@ -52,7 +52,7 @@ export default function RecepcionistaPacientes() {
     try {
       setLoading(true);
       const filterQuery = searchQuery.trim();
-      let query = supabase.from('users').select('*').order('name', { ascending: true });
+      let query = supabase.from('patients').select('*').order('name', { ascending: true });
 
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
@@ -104,14 +104,14 @@ export default function RecepcionistaPacientes() {
 
       if (editing && form.id) {
         const { error } = await supabase
-          .from('users')
+          .from('patients')
           .update(payload)
           .eq('id', form.id);
 
         if (error) throw error;
         setNotification({ type: 'success', message: 'Paciente atualizado com sucesso.' });
       } else {
-        const { error } = await supabase.from('users').insert([payload]);
+        const { error } = await supabase.from('patients').insert([payload]);
         if (error) throw error;
         setNotification({ type: 'success', message: 'Paciente cadastrado com sucesso.' });
       }
@@ -142,7 +142,7 @@ export default function RecepcionistaPacientes() {
     if (!window.confirm('Deseja remover esse paciente permanentemente?')) return;
     try {
       setSaving(true);
-      const { error } = await supabase.from('users').delete().eq('id', id);
+      const { error } = await supabase.from('patients').delete().eq('id', id);
       if (error) throw error;
       setNotification({ type: 'success', message: 'Paciente removido.' });
       fetchPatients();
