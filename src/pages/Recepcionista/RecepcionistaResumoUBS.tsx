@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { CnesService, type CnesHorario } from '../lib/cnesService';
-import { ArrowLeft, Users, Clock3, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { CnesService, type CnesHorario } from '../../lib/cnesService';
+import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck, CheckCircle, XCircle, Info, X } from 'lucide-react';
 
 type ProfessionalSummary = {
   cns: string;
@@ -22,7 +22,7 @@ type AppointmentSummary = {
   professional_cns?: string;
   specialty?: string;
   patient_id?: string;
-  location?: string;
+  cnes_id?: string;
 };
 
 
@@ -51,10 +51,12 @@ const getTodayHorarioLabel = (horarios: CnesHorario[]) => {
 
 const getStatusLabel = (status?: string) => {
   const normalized = status?.toLowerCase() || '';
-  if (normalized.includes('attended') || normalized.includes('compareceu')) return { label: 'Compareceu', classes: 'bg-green-100 text-green-800' };
+  if (normalized.includes('attended') || normalized.includes('compareceu')) return { label: 'Atendido', classes: 'bg-green-100 text-green-800' };
   if (normalized.includes('missed') || normalized.includes('faltou')) return { label: 'Faltou', classes: 'bg-red-100 text-red-800' };
+  if (normalized.includes('checked_in') || normalized.includes('fila')) return { label: 'Na Fila', classes: 'bg-blue-100 text-blue-800' };
+  if (normalized.includes('in_progress')) return { label: 'Em Atendimento', classes: 'bg-amber-100 text-amber-800' };
   if (normalized.includes('cancel')) return { label: 'Cancelada', classes: 'bg-yellow-100 text-yellow-800' };
-  return { label: status || 'Agendada', classes: 'bg-blue-100 text-blue-800' };
+  return { label: 'Agendada', classes: 'bg-gray-100 text-gray-800' };
 };
 
 export default function RecepcionistaResumoUBS() {
@@ -94,7 +96,12 @@ export default function RecepcionistaResumoUBS() {
             .order('nome', { ascending: true }),
           supabase
             .from('appointments')
-            .select('*')
+            .select(`
+              *,
+              patients ( name, cpf ),
+              professionals ( nome, especialidade )
+            `)
+            .eq('cnes_id', profile.cnes)
             .gte('date_time', startOfDay.toISOString())
             .lte('date_time', endOfDay.toISOString())
             .order('date_time', { ascending: true }),
@@ -142,6 +149,52 @@ export default function RecepcionistaResumoUBS() {
     const timeout = window.setTimeout(() => setNotification(null), 4000);
     return () => window.clearTimeout(timeout);
   }, [notification]);
+
+  const fetchResumo = async () => {
+    if (!profile?.cnes) return;
+    const today = new Date();
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          *, 
+          patients ( name, cpf ),
+          professionals ( nome, especialidade )
+        `)
+        .eq('cnes_id', profile.cnes)
+        .gte('date_time', startOfDay.toISOString())
+        .lte('date_time', endOfDay.toISOString())
+        .order('date_time', { ascending: true });
+
+      if (error) throw error;
+      setAppointments((data || []) as AppointmentSummary[]);
+    } catch (err: any) {
+      console.error('Erro ao recarregar consultas:', err);
+    }
+  };
+
+  const handleCheckIn = async (aptId: string) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          status: 'checked_in',
+          checked_in_at: new Date().toISOString()
+        })
+        .eq('id', aptId);
+
+      if (error) throw error;
+      setNotification({ type: 'success', message: 'Check-in realizado com sucesso!' });
+      fetchResumo();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Erro ao realizar check-in: ' + err.message });
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -191,8 +244,27 @@ export default function RecepcionistaResumoUBS() {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {notification && (
-          <div className={`mb-6 rounded-lg border px-4 py-3 text-sm shadow ${notification.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : notification.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
-            {notification.message}
+          <div className="fixed top-24 right-6 z-50 animate-in slide-in-from-right-8 duration-300">
+            <div className={`rounded-2xl border-2 px-6 py-4 shadow-2xl flex items-center gap-3 min-w-[300px] ${
+              notification.type === 'success' ? 'bg-green-600 border-green-500 text-white' : 
+              notification.type === 'error' ? 'bg-red-600 border-red-500 text-white' : 
+              'bg-blue-600 border-blue-500 text-white'
+            }`}>
+              {notification.type === 'success' && <CheckCircle size={24} />}
+              {notification.type === 'error' && <XCircle size={24} />}
+              {notification.type === 'info' && <Info size={24} />}
+              
+              <div className="flex-1">
+                <p className="font-bold text-sm leading-tight">{notification.message}</p>
+              </div>
+
+              <button 
+                onClick={() => setNotification(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -211,7 +283,7 @@ export default function RecepcionistaResumoUBS() {
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+        <section className="grid gap-6 xl:grid-cols-[2.5fr_1fr]">
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
@@ -273,10 +345,11 @@ export default function RecepcionistaResumoUBS() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Horário</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Turno</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Profissional</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Paciente</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -291,16 +364,35 @@ export default function RecepcionistaResumoUBS() {
                   ) : (
                     filteredAppointments.map((appointment) => {
                       const appointmentDate = new Date(appointment.date_time);
-                      const timeText = appointmentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const timeText = appointment.shift === 'morning' ? 'Manhã' : 'Tarde';
                       const status = getStatusLabel(appointment.status);
 
                       return (
                         <tr key={appointment.id}>
                           <td className="px-4 py-4 text-sm text-gray-700">{timeText}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{appointment.professional_name || appointment.specialty || 'Não informado'}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{appointment.patient_id || 'Não informado'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-gray-900">
+                                {(appointment as any).professionals?.nome || appointment.professional_name || 'Não informado'}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {(appointment as any).professionals?.especialidade || (appointment.specialty && appointment.specialty.length > 30 ? 'Consultar' : appointment.specialty)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{(appointment as any).patients?.name || 'Não informado'}</td>
                           <td className="px-4 py-4">
                             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.classes}`}>{status.label}</span>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            {(!appointment.status || appointment.status === 'scheduled') && (
+                              <button
+                                onClick={() => handleCheckIn(appointment.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
+                              >
+                                <UserCheck size={14} /> Check-in
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -347,3 +439,4 @@ export default function RecepcionistaResumoUBS() {
     </div>
   );
 }
+

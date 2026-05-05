@@ -9,24 +9,32 @@ export class AppointmentService {
    * Returns number of booked appointments and whether there's capacity
    */
   static async checkAvailability(
-    location: string,
+    cnes_id: string,
     specialty: string,
     shift: ShiftType,
-    dateStr: string
+    dateStr: string,
+    professional_cns?: string | null
   ): Promise<{ booked: number; available: number; isFull: boolean }> {
     try {
       const startOfDay = new Date(dateStr).toISOString().split('T')[0] + 'T00:00:00Z';
       const endOfDay = new Date(dateStr).toISOString().split('T')[0] + 'T23:59:59Z';
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('appointments')
         .select('id')
-        .eq('location', location)
-        .eq('specialty', specialty)
+        .eq('cnes_id', cnes_id)
         .eq('shift', shift)
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
         .in('status', ['scheduled', 'in_progress', 'attended']);
+
+      if (professional_cns) {
+        query = query.eq('professional_cns', professional_cns);
+      } else {
+        query = query.eq('specialty', specialty);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -45,7 +53,7 @@ export class AppointmentService {
    * Get all appointments for a professional on a specific date
    */
   static async getAppointmentsForDay(
-    location: string,
+    cnes_id: string,
     dateStr: string,
     specialty?: string
   ): Promise<Appointment[]> {
@@ -55,8 +63,8 @@ export class AppointmentService {
 
       let query = supabase
         .from('appointments')
-        .select('id, date_time, status, notes, location, specialty, professional_name, patient_id, shift, users(name, cpf)')
-        .eq('location', location)
+        .select('id, date_time, status, notes, cnes_id, specialty, professional_name, patient_id, shift, patients(name, cpf)')
+        .eq('cnes_id', cnes_id)
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
         .order('date_time', { ascending: true });
@@ -88,7 +96,7 @@ export class AppointmentService {
         date_time: appointmentData.date_time,
         status: appointmentData.status || 'scheduled',
         notes: appointmentData.notes || '',
-        location: appointmentData.location || 'Não informado',
+        cnes_id: appointmentData.cnes_id || 'Não informado',
         specialty: appointmentData.specialty || '',
         professional_name: appointmentData.professional_name || '',
         patient_id: appointmentData.patient_id,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { CnesService, type CnesHorario } from '../lib/cnesService';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { CnesService, type CnesHorario } from '../../lib/cnesService';
 import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,7 +14,20 @@ export default function ProfissionalAgenda() {
     const [loading, setLoading] = useState(true);
     const [ubsName, setUbsName] = useState('');
     const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-    
+
+    const formatCPF = (v: string) => {
+        const d = v.replace(/\D/g, '').slice(0, 11);
+        if (d.length <= 3) return d;
+        if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+        if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
+    };
+
+    const getShiftLabel = (shift: string | null) => {
+        if (shift === 'morning') return 'Manhã';
+        if (shift === 'afternoon') return 'Tarde';
+        return 'Não definido';
+    };
     const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
@@ -95,10 +108,11 @@ export default function ProfissionalAgenda() {
                     date_time,
                     status,
                     notes,
-                    location,
+                    cnes_id,
                     specialty,
                     shift,
-                    patients ( name, cpf )
+                    patients ( name, cpf ),
+                    cnes_establishments ( name )
                 `)
                 .eq('professional_cns', profile?.cns)
                 .gte('date_time', startDate)
@@ -157,65 +171,38 @@ export default function ProfissionalAgenda() {
         return blockedTimes.filter(blk => {
             const blkDate = new Date(blk.date_time);
             return blkDate.getDate() === selectedDate.getDate() &&
-                   blkDate.getMonth() === selectedDate.getMonth() &&
-                   blkDate.getFullYear() === selectedDate.getFullYear();
+                blkDate.getMonth() === selectedDate.getMonth() &&
+                blkDate.getFullYear() === selectedDate.getFullYear();
         });
     }, [blockedTimes, selectedDate]);
 
-    const getScheduleForDate = (date: Date) => {
-        const daysMapping = ["DOMINGO", "SEGUNDA-FEIRA", "TERCA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SABADO"];
-        const dayName = daysMapping[date.getDay()];
 
-        const horario = horariosUbs.find(h => {
-            if (!h.diaSemana) return false;
-            const normalizedDia = h.diaSemana.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-            return normalizedDia === dayName || normalizedDia.includes(dayName) || h.diaSemana === String(date.getDay() + 1);
-        });
-
-        if (!horario || !horario.hrInicioAtendimento || !horario.hrFimAtendimento) {
-            if (date.getDay() === 0 || date.getDay() === 6) return null;
-            return { hrInicioAtendimento: '07:00', hrFimAtendimento: '17:00' };
-        }
-
-        return horario;
-    };
-
-    const getCapacityForDate = (date: Date) => {
-        const schedule = getScheduleForDate(date);
-        if (!schedule) return 0;
-
-        const parse = (timeStr: string) => {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            return hours * 60 + minutes;
-        };
-
-        const startMinutes = parse(schedule.hrInicioAtendimento.substring(0, 5));
-        const endMinutes = parse(schedule.hrFimAtendimento.substring(0, 5));
-        const totalMinutes = Math.max(0, endMinutes - startMinutes);
-        return Math.floor(totalMinutes / 30);
-    };
-
-    const selectedDateCapacity = useMemo(() => getCapacityForDate(selectedDate), [selectedDate, horariosUbs]);
 
     const selectedDateAppointments = useMemo(() => {
         return appointments.filter(apt => {
             const aptDate = new Date(apt.date_time);
             return aptDate.getDate() === selectedDate.getDate() &&
-                   aptDate.getMonth() === selectedDate.getMonth() &&
-                   aptDate.getFullYear() === selectedDate.getFullYear();
+                aptDate.getMonth() === selectedDate.getMonth() &&
+                aptDate.getFullYear() === selectedDate.getFullYear();
         });
     }, [appointments, selectedDate]);
 
+    const shiftCounts = useMemo(() => {
+        const morning = selectedDateAppointments.filter(a => a.shift === 'morning').length;
+        const afternoon = selectedDateAppointments.filter(a => a.shift === 'afternoon').length;
+        return { morning, afternoon };
+    }, [selectedDateAppointments]);
+
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-    const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay(); 
-    
+    const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+
     const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const blanksArray = Array.from({ length: firstDayOfMonth }, (_, i) => i);
     const monthName = currentMonth.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
 
     const handleCreateBlock = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!blockForm.date) {
             setNotification({ type: 'error', message: 'Por favor, selecione uma data para bloqueio.' });
             return;
@@ -226,11 +213,11 @@ export default function ProfissionalAgenda() {
         const blockExists = blockedTimes.some(blk => {
             const blkDate = new Date(blk.date_time);
             return blkDate.getDate() === targetDate.getDate() &&
-                   blkDate.getMonth() === targetDate.getMonth() &&
-                   blkDate.getFullYear() === targetDate.getFullYear() &&
-                   blk.professional_name === blockForm.professionalName &&
-                   blk.location === (blockForm.location || 'Não informado') &&
-                   blk.specialty === (blockForm.specialty || '');
+                blkDate.getMonth() === targetDate.getMonth() &&
+                blkDate.getFullYear() === targetDate.getFullYear() &&
+                blk.professional_name === blockForm.professionalName &&
+                blk.location === (blockForm.location || 'Não informado') &&
+                blk.specialty === (blockForm.specialty || '');
         });
 
         if (blockExists) {
@@ -255,7 +242,7 @@ export default function ProfissionalAgenda() {
             setNotification({ type: 'success', message: 'Dia bloqueado com sucesso!' });
             setIsBlockModalOpen(false);
             fetchAgendaParaOMes(currentMonth);
-            
+
         } catch (err: any) {
             console.error(err);
             setNotification({ type: 'error', message: 'Erro ao bloquear o dia: ' + err.message });
@@ -292,7 +279,7 @@ export default function ProfissionalAgenda() {
     const handleOpenBlockModal = () => {
         const d = selectedDate;
         const formattedDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        
+
         let initialLocation = blockForm.location || ubsName || profile?.cnes || '';
         const initialSpecialty = blockForm.specialty || profile?.especialidade || '';
 
@@ -300,7 +287,7 @@ export default function ProfissionalAgenda() {
         if (!initialLocation && appointments.length > 0) {
             initialLocation = appointments[0].location || '';
         }
-        
+
         setBlockForm(prev => ({
             ...prev,
             date: formattedDate,
@@ -349,20 +336,20 @@ export default function ProfissionalAgenda() {
                             {daysArray.map((day) => {
                                 const currentDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
                                 const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
-                                
+
                                 const today = new Date();
                                 today.setHours(0, 0, 0, 0);
                                 const isPastDate = currentDate < today;
-                                
+
                                 const isSelected = selectedDate.getDate() === day && selectedDate.getMonth() === currentMonth.getMonth() && selectedDate.getFullYear() === currentMonth.getFullYear();
                                 const hasApt = appointments.some(apt => new Date(apt.date_time).getDate() === day);
                                 const hasBlock = blockedTimes.some(blk => new Date(blk.date_time).getDate() === day);
-                                
+
                                 const isUnavailable = isWeekend; // Removemos isPastDate para permitir clique em datas passadas
 
                                 return (
-                                    <div 
-                                        key={day} 
+                                    <div
+                                        key={day}
                                         onClick={() => {
                                             if (!isUnavailable) {
                                                 setSelectedDate(currentDate);
@@ -389,20 +376,32 @@ export default function ProfissionalAgenda() {
                         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                             <div>
                                 <h3 className="text-md font-semibold text-gray-800 ">
-                                    Consultas e bloqueios: {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    Consultas: {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </h3>
                                 <p className="text-sm text-gray-600 mt-1">
-                                    {selectedDateBlocks.length > 0 ? 'Dia bloqueado para atendimento.' : `Atendimentos agendados: ${selectedDateAppointments.length} de ${selectedDateCapacity}`}
-                                    {selectedDateCapacity > 0 && selectedDateAppointments.length >= selectedDateCapacity ? ' — limite atingido' : ''}
+                                    {selectedDateBlocks.length > 0 ? (
+                                        'Dia bloqueado para atendimento.'
+                                    ) : (
+                                        <>
+                                            Agendados:
+                                            <span className={`ml-1 font-medium ${shiftCounts.morning >= 5 ? 'text-red-600' : 'text-gray-800'}`}>
+                                                {shiftCounts.morning}/5 Manhã
+                                            </span>
+                                            <span className="mx-2 text-gray-400">|</span>
+                                            <span className={`font-medium ${shiftCounts.afternoon >= 5 ? 'text-red-600' : 'text-gray-800'}`}>
+                                                {shiftCounts.afternoon}/5 Tarde
+                                            </span>
+                                        </>
+                                    )}
                                 </p>
                             </div>
                             {(() => {
                                 const today = new Date();
                                 today.setHours(0, 0, 0, 0);
                                 const isPastSelected = selectedDate < today;
-                                
+
                                 return (
-                                    <button 
+                                    <button
                                         onClick={handleToggleBlock}
                                         disabled={isPastSelected}
                                         className={`flex items-center gap-2 ${selectedDateBlocks.length > 0 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-1.5 rounded shadow transition text-sm ${isPastSelected ? 'invisible' : ''}`}>
@@ -439,7 +438,7 @@ export default function ProfissionalAgenda() {
                                             </li>
                                         );
                                     })}
-                                    
+
                                     {/* Mostrar agendamentos normais */}
                                     {selectedDateAppointments.map((apt) => {
                                         const aptDate = new Date(apt.date_time);
@@ -448,8 +447,8 @@ export default function ProfissionalAgenda() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center text-sm font-bold text-indigo-600">
                                                         <User className="mr-2 h-5 w-5 text-gray-400" />
-                                                        {apt.patients?.name || 'Paciente não identificado'} 
-                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {apt.patients.cpf})</span>}
+                                                        {apt.patients?.name || 'Paciente não identificado'}
+                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {formatCPF(apt.patients.cpf)})</span>}
                                                     </div>
                                                     <div>
                                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(apt.status)}`}>
@@ -460,10 +459,12 @@ export default function ProfissionalAgenda() {
                                                 <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600">
                                                     <div className="flex items-center text-gray-800 font-medium">
                                                         <Clock className="mr-2 h-4 w-4 text-green-500" />
-                                                        {aptDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                        Turno: <span className="ml-1 text-indigo-600 font-bold">{getShiftLabel(apt.shift)}</span>
                                                     </div>
-                                                    {apt.location && <div>Local: {apt.location}</div>}
-                                                    {apt.notes && <div className="italic break-words">Obs: {apt.notes}</div>}
+                                                    <div className="flex items-center text-xs text-gray-500">
+                                                        Unidade: <strong className="ml-1 text-gray-700">{apt.cnes_establishments?.name ? CnesService.formatCnesDisplayName(apt.cnes_establishments.name) : (apt.cnes_id || 'Não informada')}</strong>
+                                                    </div>
+                                                    {apt.notes && <div className="italic break-words text-xs text-gray-500 border-l-2 border-gray-200 pl-2 mt-1">Obs: {apt.notes}</div>}
                                                 </div>
                                             </li>
                                         );
@@ -490,18 +491,18 @@ export default function ProfissionalAgenda() {
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                                     <div className="flex-1">
                                         <label className="block text-sm font-medium text-gray-700">Data *</label>
-                                        <input 
-                                            type="date" 
+                                        <input
+                                            type="date"
                                             min={new Date().toISOString().split('T')[0]}
-                                            required 
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border" 
+                                            required
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
                                             value={blockForm.date}
-                                            onChange={e => setBlockForm({...blockForm, date: e.target.value})}
+                                            onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
                                         />
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700">Nome do Profissional *</label>
@@ -517,10 +518,10 @@ export default function ProfissionalAgenda() {
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700">Unidade</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         disabled
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed" 
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed"
                                         value={blockForm.location || 'Não informado'}
                                     />
                                 </div>
@@ -528,25 +529,25 @@ export default function ProfissionalAgenda() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Motivo do Bloqueio</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     placeholder="Ex: Feriado, Atestado..."
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border" 
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
                                     value={blockForm.reason}
-                                    onChange={e => setBlockForm({...blockForm, reason: e.target.value})}
+                                    onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
                                 />
                             </div>
 
                             <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={() => setIsBlockModalOpen(false)}
                                     className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
                                 >
                                     Cancelar
                                 </button>
-                                <button 
-                                    type="submit" 
+                                <button
+                                    type="submit"
                                     disabled={isSubmittingBlock}
                                     className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-md transition disabled:opacity-50"
                                 >
@@ -572,14 +573,14 @@ export default function ProfissionalAgenda() {
                                 Tem certeza que deseja liberar o bloqueio para {selectedDate.toLocaleDateString('pt-BR')}?
                             </p>
                             <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
-                                <button 
+                                <button
                                     type="button"
                                     onClick={() => setIsUnblockModalOpen(false)}
                                     className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
                                 >
                                     Cancelar
                                 </button>
-                                <button 
+                                <button
                                     type="button"
                                     onClick={confirmUnblockDay}
                                     disabled={isSubmittingUnblock}

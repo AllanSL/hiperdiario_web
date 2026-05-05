@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import type { CnesEstabelecimento, CnesProfissional } from '../lib/cnesService';
-import { CnesService } from '../lib/cnesService';
+import { supabase } from '../../lib/supabase';
+import type { CnesEstabelecimento, CnesProfissional } from '../../lib/cnesService';
+import { CnesService } from '../../lib/cnesService';
 import { UserPlus, Search } from 'lucide-react';
-import ufsData from '../lib/municipios.json';
-import { CustomSelect } from '../components/CustomSelect';
+import ufsData from '../../lib/municipios.json';
+import { CustomSelect } from '../../components/CustomSelect';
 
 export default function Register() {
     const [cpf, setCpf] = useState('');

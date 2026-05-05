@@ -1,16 +1,16 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Login from './pages/Login';
-import RecepcionistaDashboard from './pages/RecepcionistaDashboard';
-import RecepcionistaPacientes from './pages/RecepcionistaPacientes';
-import RecepcionistaAgenda from './pages/RecepcionistaAgenda';
-import RecepcionistaResumoUBS from './pages/RecepcionistaResumoUBS';
-import FarmaciaDashboard from './pages/FarmaciaDashboard';
-import ProfissionalDashboard from './pages/ProfissionalDashboard';
-import ProfissionalAgenda from './pages/ProfissionalAgenda';
-import ProfissionalPacientesDia from './pages/ProfissionalPacientesDia';
-import ProfissionalPacientes from './pages/ProfissionalPacientes';
-import Register from './pages/Register';
+import Login from './pages/Auth/Login';
+import RecepcionistaDashboard from './pages/Recepcionista/RecepcionistaDashboard';
+import RecepcionistaPacientes from './pages/Recepcionista/RecepcionistaPacientes';
+import RecepcionistaAgenda from './pages/Recepcionista/RecepcionistaAgenda';
+import RecepcionistaResumoUBS from './pages/Recepcionista/RecepcionistaResumoUBS';
+import FarmaciaDashboard from './pages/Farmacia/FarmaciaDashboard';
+import ProfissionalDashboard from './pages/Profissional/ProfissionalDashboard';
+import ProfissionalAgenda from './pages/Profissional/ProfissionalAgenda';
+import ProfissionalAtendimentos from './pages/Profissional/ProfissionalAtendimentos';
+import ProfissionalPacientes from './pages/Profissional/ProfissionalPacientes';
+import Register from './pages/Auth/Register';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
   const { session, profile, loading } = useAuth();
@@ -38,7 +38,7 @@ export default function App() {
           <Route path='/farmacia' element={<ProtectedRoute allowedRoles={['farmacia']}><FarmaciaDashboard /></ProtectedRoute>} />
           <Route path='/profissional' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalDashboard /></ProtectedRoute>} />
           <Route path='/profissional/agenda' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalAgenda /></ProtectedRoute>} />
-          <Route path='/profissional/pacientes-dia' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientesDia /></ProtectedRoute>} />
+          <Route path='/profissional/atendimentos' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalAtendimentos /></ProtectedRoute>} />
           <Route path='/profissional/pacientes' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientes /></ProtectedRoute>} />
         </Routes>
       </HashRouter>

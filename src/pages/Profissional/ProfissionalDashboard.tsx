@@ -1,54 +1,42 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { LogOut, Activity, CalendarCheck, Calendar, Users } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { LogOut, Activity, Calendar, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfissionalDashboard() {
     const { profile } = useAuth();
     const navigate = useNavigate();
-    const [pacientesDoDia, setPacientesDoDia] = useState<any[]>([]);
-    const [atendimentoEmAndamento, setAtendimentoEmAndamento] = useState<any>(null);
+    const [stats, setStats] = useState({ total: 0, naFila: 0, emAtendimento: 0, atendidos: 0 });
     const [loading, setLoading] = useState(true);
 
     const handleLogout = () => supabase.auth.signOut();
 
     useEffect(() => {
-        if (profile?.user_id) {
-            fetchDashboardData();
-        }
+        if (profile?.cns) fetchDashboardData();
     }, [profile]);
 
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            const hoje = new Date().toISOString().split('T')[0];
+            const hoje = new Date().toLocaleDateString('en-CA');
 
-            // Busca os agendamentos do dia para este profissional na tabela appointments
-            const { data: appointments, error } = await supabase
+            const { data, error } = await supabase
                 .from('appointments')
-                .select(`
-                    id, 
-                    date_time,
-                    status,
-                    shift,
-                    patients ( name )
-                `)
+                .select('id, status')
                 .eq('professional_cns', profile?.cns)
                 .gte('date_time', `${hoje}T00:00:00`)
                 .lte('date_time', `${hoje}T23:59:59`);
 
             if (error) throw error;
 
-            if (appointments) {
-                // Filtra os que já estão agendados (pendentes) - Status prováveis: 'scheduled'
-                const pendentes = appointments.filter(a => a.status !== 'in_progress' && a.status !== 'completed');
-                setPacientesDoDia(pendentes);
-
-                // Pega aquele que está em andamento, se houver
-                const emAndamento = appointments.find(a => a.status === 'in_progress');
-                setAtendimentoEmAndamento(emAndamento || null);
-            }
+            const apts = data || [];
+            setStats({
+                total: apts.length,
+                naFila: apts.filter(a => a.status === 'checked_in').length,
+                emAtendimento: apts.filter(a => a.status === 'in_progress').length,
+                atendidos: apts.filter(a => a.status === 'attended').length,
+            });
         } catch (err) {
             console.error('Erro ao buscar dados do dashboard:', err);
         } finally {
@@ -71,50 +59,45 @@ export default function ProfissionalDashboard() {
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 {loading ? (
                     <div className="flex justify-center items-center py-10">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {/* Pacientes do Dia */}
+                        {/* Atendimentos do Dia */}
                         <div 
-                            onClick={() => navigate('/profissional/pacientes-dia')}
-                            className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-indigo-500 cursor-pointer hover:shadow-lg transition"
-                        >
-                            <div className="flex items-center gap-3 mb-2">
-                                <CalendarCheck className="text-indigo-500 h-8 w-8" />
-                                <h2 className="text-lg font-semibold">Pacientes do Dia</h2>
-                            </div>
-                            <p className="mt-2 text-gray-600 flex-grow">
-                                {pacientesDoDia.length > 0 
-                                    ? `Você tem ${pacientesDoDia.length} atendimento(s) agendado(s) hoje.` 
-                                    : "Não há pacientes agendados para hoje."}
-                            </p>
-                        </div>
-
-                        {/* Atendimento em Andamento */}
-                        <div className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-red-500 cursor-pointer hover:shadow-lg transition">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Activity className="text-red-500 h-8 w-8" />
-                                <h2 className="text-lg font-semibold">Atendimento em Andamento</h2>
-                            </div>
-                            <p className="mt-2 text-gray-600 flex-grow">
-                                {atendimentoEmAndamento 
-                                    ? `Atendendo agora: ${atendimentoEmAndamento.patients?.name || 'Paciente Atual'}`
-                                    : "Nenhum atendimento em andamento no momento."}
-                            </p>
-                        </div>
-
-                        {/* Agenda - Nova Opção */}
-                        <div 
-                            onClick={() => navigate('/profissional/agenda')}
+                            onClick={() => navigate('/profissional/atendimentos')}
                             className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-green-500 cursor-pointer hover:shadow-lg transition"
                         >
                             <div className="flex items-center gap-3 mb-2">
-                                <Calendar className="text-green-500 h-8 w-8" />
+                                <Activity className="text-green-500 h-8 w-8" />
+                                <h2 className="text-lg font-semibold">Atendimentos do Dia</h2>
+                            </div>
+                            <p className="mt-2 text-gray-600 flex-grow">
+                                {stats.total === 0 
+                                    ? 'Nenhum atendimento agendado para hoje.'
+                                    : (
+                                        <>
+                                            {stats.total} agendado{stats.total > 1 ? 's' : ''} hoje.
+                                            {stats.naFila > 0 && <span className="block text-blue-600 font-medium mt-1">{stats.naFila} na fila de espera</span>}
+                                            {stats.emAtendimento > 0 && <span className="block text-amber-600 font-medium">1 em atendimento</span>}
+                                            {stats.atendidos > 0 && <span className="block text-green-600 font-medium">{stats.atendidos} atendido{stats.atendidos > 1 ? 's' : ''}</span>}
+                                        </>
+                                    )
+                                }
+                            </p>
+                        </div>
+
+                        {/* Agenda */}
+                        <div 
+                            onClick={() => navigate('/profissional/agenda')}
+                            className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-indigo-500 cursor-pointer hover:shadow-lg transition"
+                        >
+                            <div className="flex items-center gap-3 mb-2">
+                                <Calendar className="text-indigo-500 h-8 w-8" />
                                 <h2 className="text-lg font-semibold">Agenda</h2>
                             </div>
                             <p className="mt-2 text-gray-600 flex-grow">
-                                Visualize sua programação semanal, bloqueie horários e confira retornos.
+                                Visualize sua programação semanal, bloqueie dias e confira retornos.
                             </p>
                         </div>
 

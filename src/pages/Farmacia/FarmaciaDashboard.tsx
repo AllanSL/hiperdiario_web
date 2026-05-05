@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock } from 'lucide-react';
-import { CustomSelect } from '../components/CustomSelect';
-import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../../components/CustomSelect';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 function formatCpf(cpf?: string | number | null) {
     if (cpf === undefined || cpf === null) return '';
@@ -1530,3 +1530,4 @@ export default function FarmaciaDashboard() {
         </div>
     );
 }
+

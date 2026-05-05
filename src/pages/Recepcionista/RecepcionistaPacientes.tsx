@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Edit, Trash2, Search, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -306,3 +306,4 @@ export default function RecepcionistaPacientes() {
     </div>
   );
 }
+

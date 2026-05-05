@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { CnesService, type CnesHorario } from '../lib/cnesService';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { CnesService, type CnesHorario } from '../../lib/cnesService';
 import { LogOut, Calendar, UserPlus, Clipboard, Clock } from 'lucide-react';
 
 interface UnidadeInfo {

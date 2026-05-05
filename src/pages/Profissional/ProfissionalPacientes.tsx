@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Search, X, Pill, AlertCircle, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -70,7 +70,7 @@ export default function ProfissionalPacientes() {
     try {
       setLoading(true);
       const filterQuery = searchQuery.trim();
-      let query = supabase.from('users').select('*').order('name', { ascending: true });
+      let query = supabase.from('patients').select('*').order('name', { ascending: true });
 
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
@@ -106,7 +106,7 @@ export default function ProfissionalPacientes() {
       
       // Primeiro, busca o remote_id do paciente (UUID)
       const { data: patientData, error: patientError } = await supabase
-        .from('users')
+        .from('patients')
         .select('remote_id')
         .eq('id', patientId)
         .single();
@@ -226,7 +226,7 @@ export default function ProfissionalPacientes() {
     try {
       setSaving(true);
       const { error } = await supabase
-        .from('users')
+        .from('patients')
         .update({ diseases: selectedDiseases })
         .eq('id', patientId);
 

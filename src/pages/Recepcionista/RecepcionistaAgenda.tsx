@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { ArrowLeft, Plus, Trash2, Ban, Search, Edit, ChevronLeft, ChevronRight, MapPin, Calendar, Users } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { ArrowLeft, Plus, Trash2, Ban, Search, Edit, ChevronLeft, ChevronRight, MapPin, Calendar, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { calculateDateTimeFromShift, getShiftFromHour } from '../lib/database.types';
-import type { ShiftType } from '../lib/database.types';
-import { CnesService } from '../lib/cnesService';
+import { calculateDateTimeFromShift, getShiftFromHour, type ShiftType } from '../../lib/database.types';
+import { CnesService } from '../../lib/cnesService';
+import { AppointmentService } from '../../lib/appointmentService';
 
 type Professional = {
   user_id?: string;
@@ -131,8 +131,11 @@ export default function RecepcionistaAgenda() {
 
       const aptResult = await supabase
         .from('appointments')
-        .select('*')
-        .eq('location', profile?.cnes)
+        .select(`
+          *,
+          patients ( name, cpf )
+        `)
+        .eq('cnes_id', profile?.cnes)
         .gte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString())
         .lte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59).toISOString())
         .order('date_time', { ascending: true });
@@ -140,7 +143,7 @@ export default function RecepcionistaAgenda() {
       const blockResult = await supabase
         .from('blocked_times')
         .select('*')
-        .eq('location', profile?.cnes)
+        .eq('cnes_id', profile?.cnes)
         .gte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString())
         .lte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59).toISOString())
         .order('date_time', { ascending: true });
@@ -378,13 +381,34 @@ export default function RecepcionistaAgenda() {
     }
     const professional = selectedProfessional;
     const dateTime = calculateDateTimeFromShift(appointmentForm.date, appointmentForm.shift);
+    
     try {
       setCreatingAppointment(true);
+
+      // Verificação de capacidade (Limite de 5 por turno)
+      if (!editingAppointment) {
+        const availability = await AppointmentService.checkAvailability(
+          profile?.cnes || '',
+          professional?.especialidade || '',
+          appointmentForm.shift,
+          appointmentForm.date,
+          professional?.cns
+        );
+
+        if (availability.isFull) {
+          setNotification({ 
+            type: 'error', 
+            message: `Capacidade máxima atingida para o turno da ${appointmentForm.shift === 'morning' ? 'manhã' : 'tarde'} (${availability.booked}/5).` 
+          });
+          setCreatingAppointment(false);
+          return;
+        }
+      }
       const payload: any = {
         date_time: dateTime,
         status: appointmentForm.status,
         notes: appointmentForm.notes,
-        location: profile?.cnes || '',
+        cnes_id: profile?.cnes || '',
         specialty: professional ? `${professional.especialidade} - ${professional.nome}` : '',
         professional_name: professional?.nome || '',
         professional_cns: professional?.cns || null,
@@ -432,6 +456,20 @@ export default function RecepcionistaAgenda() {
         setConfirmModal(prev => ({ ...prev, show: false }));
       }
     });
+  };
+
+  const handleCheckIn = async (aptId: string) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'checked_in', checked_in_at: new Date().toISOString() })
+        .eq('id', aptId);
+      if (error) throw error;
+      setNotification({ type: 'success', message: 'Check-in realizado! Paciente adicionado à fila.' });
+      fetchData();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Erro ao fazer check-in: ' + err.message });
+    }
   };
 
   const handleToggleBlock = async () => {
@@ -841,13 +879,36 @@ export default function RecepcionistaAgenda() {
                                         );
                                       })()}
                                     </div>
-                                    <div className="text-right text-sm text-gray-500">
-                                      <p className="font-bold text-gray-700 text-base">{aptDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                                      <p>{apt.status === 'attended' ? 'Compareceu' : apt.status === 'missed' ? 'Faltou' : 'Agendada'}</p>
+                                    <div className="text-right text-sm text-gray-500 flex flex-col items-end gap-1">
+                                      <p className="font-bold text-gray-700 text-base">{apt.shift === 'morning' ? 'Manhã' : 'Tarde'}</p>
+                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                        apt.status === 'checked_in' ? 'bg-blue-100 text-blue-700' :
+                                        apt.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
+                                        apt.status === 'attended' ? 'bg-green-100 text-green-700' :
+                                        apt.status === 'missed' ? 'bg-red-100 text-red-700' :
+                                        'bg-gray-100 text-gray-600'
+                                      }`}>
+                                        {apt.status === 'checked_in' ? 'Na fila' :
+                                         apt.status === 'in_progress' ? 'Em atendimento' :
+                                         apt.status === 'attended' ? 'Atendido' :
+                                         apt.status === 'missed' ? 'Faltou' : 'Agendada'}
+                                      </span>
                                     </div>
                                   </div>
                                   {apt.notes && <p className="mt-2 text-sm text-gray-600 italic border-l-2 border-gray-200 pl-2">Obs: {apt.notes}</p>}
-                                  <div className="mt-3 flex gap-2">
+                                  <div className="mt-3 flex gap-2 flex-wrap">
+                                    {apt.status === 'scheduled' && (() => {
+                                      const today = new Date();
+                                      today.setHours(0, 0, 0, 0);
+                                      const aptDay = new Date(apt.date_time);
+                                      aptDay.setHours(0, 0, 0, 0);
+                                      const isToday = aptDay.getTime() === today.getTime();
+                                      return isToday ? (
+                                        <button onClick={() => handleCheckIn(apt.id)} className="inline-flex items-center gap-2 rounded-md bg-blue-600 text-white px-3 py-1.5 text-sm font-bold hover:bg-blue-700 transition shadow-sm">
+                                          <UserCheck size={14} /> Check-in
+                                        </button>
+                                      ) : null;
+                                    })()}
                                     <button onClick={() => handleEditAppointment(apt)} className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 transition">
                                       <Edit size={14} /> Editar
                                     </button>
@@ -1209,3 +1270,4 @@ export default function RecepcionistaAgenda() {
     </div>
   );
 }
+
