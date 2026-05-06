@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Edit, Search, Plus, X, ChevronDown, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Edit, Search, Plus, X, ChevronDown, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CnesService, type CnesEstabelecimento } from '../../lib/cnesService';
 import { CustomSelect } from '../../components/CustomSelect';
@@ -293,7 +293,7 @@ export default function RecepcionistaPacientes() {
 
       // Focar no primeiro campo com erro
       setTimeout(() => {
-        const firstError = document.querySelector(`[name="${errors[0]}"]`) as HTMLElement;
+        const firstError = (document.querySelector(`[name="${errors[0]}"]`) || document.querySelector(`[data-name="${errors[0]}"]`)) as HTMLElement;
         if (firstError) {
           firstError.focus();
           firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -763,7 +763,7 @@ export default function RecepcionistaPacientes() {
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Sexo</label>
                     <div
-                      name="gender"
+                      data-name="gender"
                       tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('gender') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
@@ -887,7 +887,7 @@ export default function RecepcionistaPacientes() {
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Estado (UF)</label>
                     <div
-                      name="state_code"
+                      data-name="state_code"
                       tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('state_code') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
@@ -911,7 +911,7 @@ export default function RecepcionistaPacientes() {
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Município</label>
                     <div
-                      name="city_ibge"
+                      data-name="city_ibge"
                       tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('city_ibge') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
@@ -939,7 +939,7 @@ export default function RecepcionistaPacientes() {
                   <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Unidade de Saúde (UBS)</label>
                     <div
-                      name="ubs_cnes"
+                      data-name="ubs_cnes"
                       tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('ubs_cnes') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
@@ -1008,7 +1008,7 @@ export default function RecepcionistaPacientes() {
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Parentesco</label>
                     <div
-                      name="emergency_relationship"
+                      data-name="emergency_relationship"
                       tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('emergency_relationship') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
