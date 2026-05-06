@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService, type CnesHorario } from '../../lib/cnesService';
-import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck, CheckCircle, XCircle, Info, X } from 'lucide-react';
+import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck } from 'lucide-react';
 
 type ProfessionalSummary = {
   cns: string;

@@ -310,7 +310,7 @@ export default function RecepcionistaAgenda() {
     if (!selectedProfessionalCns) return blockedTimes;
     return blockedTimes.filter((blk) => {
       if (blk.professional_cns) return blk.professional_cns === selectedProfessionalCns;
-      return blk.professional_name === selectedProfessional?.nome;
+      return blk.professionals?.nome === selectedProfessional?.nome;
     });
   }, [blockedTimes, selectedProfessionalCns, selectedProfessional]);
 
@@ -1197,28 +1197,7 @@ export default function RecepcionistaAgenda() {
           </>
         )}
       </main>
-      {notification && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className={`rounded-2xl shadow-2xl border p-4 flex items-center gap-4 min-w-[320px] ${
-            notification.type === 'success' ? 'bg-green-600 border-green-500 text-white' : 
-            notification.type === 'error' ? 'bg-red-600 border-red-500 text-white' : 
-            'bg-blue-600 border-blue-500 text-white'
-          }`}>
-            <div className="bg-white bg-opacity-20 rounded-full p-2">
-              {notification.type === 'success' && <Plus className="rotate-0" size={20} />}
-              {notification.type === 'error' && <Ban size={20} />}
-              {notification.type === 'info' && <Search size={20} />}
-            </div>
-            <div className="flex-1 pr-4">
-              <p className="font-bold text-sm leading-tight">{notification.type === 'success' ? 'Sucesso' : notification.type === 'error' ? 'Erro' : 'Informação'}</p>
-              <p className="text-xs mt-0.5 opacity-90">{notification.message}</p>
-            </div>
-            <button onClick={() => setNotification(null)} className="p-1 hover:bg-white hover:bg-opacity-10 rounded-lg transition">
-              <Plus size={18} className="rotate-45" />
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {confirmModal.show && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm animate-in fade-in duration-200">

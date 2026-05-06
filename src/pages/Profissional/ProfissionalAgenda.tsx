@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService } from '../../lib/cnesService';
-import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfissionalAgenda() {
@@ -42,7 +42,6 @@ export default function ProfissionalAgenda() {
         shift: 'all' as 'morning' | 'afternoon' | 'all'
     });
     const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
-    const [isSubmittingUnblock, setIsSubmittingUnblock] = useState(false);
 
     useEffect(() => {
         if (profile?.user_id) {
@@ -250,34 +249,7 @@ export default function ProfissionalAgenda() {
         handleOpenBlockModal();
     };
 
-    const confirmUnblockDay = async () => {
-        try {
-            setIsSubmittingUnblock(true);
-            const ids = selectedDateBlocks.map(blk => blk.id);
-            const { error } = await supabase.from('blocked_times').delete().in('id', ids);
-            if (error) throw error;
-            fetchAgendaParaOMes(currentMonth);
-            if (selectedDateBlocks.length <= ids.length) {
-                setIsBlockModalOpen(false);
-            }
-        } catch (err: any) {
-            console.error(err);
-            showNotification('error', 'Erro ao liberar o dia: ' + err.message);
-        } finally {
-            setIsSubmittingUnblock(false);
-        }
-    };
 
-    const confirmUnblockOne = async (id: string) => {
-        try {
-            const { error } = await supabase.from('blocked_times').delete().eq('id', id);
-            if (error) throw error;
-            fetchAgendaParaOMes(currentMonth);
-        } catch (err: any) {
-            console.error(err);
-            showNotification('error', 'Erro ao liberar o bloqueio: ' + err.message);
-        }
-    };
 
     const handleOpenBlockModal = () => {
         const d = selectedDate;

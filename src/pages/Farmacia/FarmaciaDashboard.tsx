@@ -476,6 +476,9 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
     const [loadingMeds, setLoadingMeds] = useState(false);
     const [editQuantity, setEditQuantity] = useState<number | ''>('');
     const [saving, setSaving] = useState(false);
+    const [editStartTime, setEditStartTime] = useState('');
+    const [editFrequencyLabel, setEditFrequencyLabel] = useState('');
+    const [editingMed, setEditingMed] = useState<any | null>(null);
     const { showNotification } = useNotification();
 
     const generateTimes = (start: string, label: string) => {
@@ -507,7 +510,6 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
     const searchPatient = async () => {
         if (!searchCpf || !cnes) return;
         setSearching(true);
-        setError('');
         setPatient(null);
         setPatientMeds([]);
 
@@ -1006,7 +1008,6 @@ export default function FarmaciaDashboard() {
     const searchPatient = async () => {
         if (!searchCpf) return;
         setSearching(true);
-        setError('');
         setPatient(null);
 
         try {
@@ -1144,8 +1145,6 @@ export default function FarmaciaDashboard() {
 
     const handleDispense = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setSuccessMsg('');
 
         if (!patient) return showNotification('error', 'Selecione o paciente.');
         if (!selectedMed) return showNotification('error', 'Selecione o medicamento.');
