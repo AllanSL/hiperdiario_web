@@ -9,8 +9,8 @@ import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck } from 'lucide-react';
 type ProfessionalSummary = {
   cns: string;
   user_id?: string;
-  nome: string;
-  especialidade?: string;
+  name: string;
+  specialty?: string;
   crm_crf?: string;
   role?: string;
 };
@@ -19,12 +19,19 @@ type AppointmentSummary = {
   id: string;
   date_time: string;
   status?: string;
-  professional_name?: string;
   professional_cns?: string;
   specialty?: string;
   patient_id?: string;
   cnes_id?: string;
   shift?: string;
+  professionals?: {
+    name: string;
+    specialty: string;
+  };
+  patients?: {
+    name: string;
+    cpf: string;
+  };
 };
 
 
@@ -93,15 +100,15 @@ export default function RecepcionistaResumoUBS() {
         const [professionalsResponse, appointmentsResponse] = await Promise.all([
           supabase
             .from('professionals')
-            .select('cns, user_id, nome, especialidade, crm_crf, role')
+            .select('cns, user_id, name, specialty, crm_crf, role')
             .eq('cnes', profile.cnes)
-            .order('nome', { ascending: true }),
+            .order('name', { ascending: true }),
           supabase
             .from('appointments')
             .select(`
               *,
               patients ( name, cpf ),
-              professionals ( nome, especialidade )
+              professionals ( name, specialty )
             `)
             .eq('cnes_id', profile.cnes)
             .gte('date_time', startOfDay.toISOString())
@@ -114,12 +121,12 @@ export default function RecepcionistaResumoUBS() {
 
         // Filtro de ocupações de saúde
         const healthKeywords = ['MEDICO', 'MÉDICO', 'DENTISTA', 'PSICOLOGO', 'PSICÓLOGO', 'NUTRICIONISTA', 'PSIQUIATRA', 'GINECOLOGISTA', 'FISIOTERAPEUTA'];
-        const isHealthProf = (especialidade: string) => {
-          const upper = especialidade.toUpperCase();
+        const isHealthProf = (specialty: string) => {
+          const upper = specialty.toUpperCase();
           return healthKeywords.some(key => upper.includes(key));
         };
 
-        const filteredProfs = (professionalsResponse.data || []).filter((p: any) => isHealthProf(p.especialidade || ''));
+        const filteredProfs = (professionalsResponse.data || []).filter((p: any) => isHealthProf(p.specialty || ''));
         setProfessionals(filteredProfs as ProfessionalSummary[]);
         setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
       } catch (err: any) {
@@ -162,7 +169,7 @@ export default function RecepcionistaResumoUBS() {
         .select(`
           *, 
           patients ( name, cpf ),
-          professionals ( nome, especialidade )
+          professionals ( name, specialty )
         `)
         .eq('cnes_id', profile.cnes)
         .gte('date_time', startOfDay.toISOString())
@@ -211,7 +218,6 @@ export default function RecepcionistaResumoUBS() {
     if (!selectedProfessionalCns) return appointments;
     return appointments.filter(
       (appointment) =>
-        appointment.professional_name === selectedProfessional?.nome ||
         appointment.professional_cns === selectedProfessionalCns,
     );
   }, [appointments, selectedProfessionalCns, selectedProfessional]);
@@ -233,10 +239,11 @@ export default function RecepcionistaResumoUBS() {
           </div>
         </div>
         <div className="flex flex-col gap-2 text-sm text-gray-700">
-          <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-blue-700 font-semibold">
+          {/* Exibir dia e horário de funcionamento da unidade */}
+          {/* <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-blue-700 font-semibold">
             <Clock3 className="h-4 w-4" />
             {horariosLoading ? 'Carregando...' : getTodayHorarioLabel(horariosUbs)}
-          </div>
+          </div> */}
         </div>
       </nav>
 
@@ -244,15 +251,15 @@ export default function RecepcionistaResumoUBS() {
 
 
         <section className="grid gap-4 mb-6 sm:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-blue-50 p-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm text-gray-600">Total de consultas</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">{totalConsultations}</p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-green-50 p-4">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4">
             <p className="text-sm text-gray-600">Compareceram</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">{attendedCount}</p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-red-50 p-4">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
             <p className="text-sm text-gray-600">Faltaram</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900">{missedCount}</p>
           </div>
@@ -274,8 +281,8 @@ export default function RecepcionistaResumoUBS() {
                   <div className="min-w-0 pr-3 text-left">
                     {selectedProfessional ? (
                       <>
-                        <p className="text-sm font-medium text-gray-900 leading-snug break-words">{selectedProfessional.nome}</p>
-                        <p className="text-xs text-gray-500 leading-tight break-words">{selectedProfessional.especialidade || 'Sem especialidade'}</p>
+                        <p className="text-sm font-medium text-gray-900 leading-snug break-words">{selectedProfessional.name}</p>
+                        <p className="text-xs text-gray-500 leading-tight break-words">{selectedProfessional.specialty || 'Sem especialidade'}</p>
                       </>
                     ) : (
                       <span className="text-sm text-gray-700">Todos os profissionais</span>
@@ -307,8 +314,8 @@ export default function RecepcionistaResumoUBS() {
                         }}
                         className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
                       >
-                        <span className="font-medium">{professional.nome}</span>
-                        <span className="block text-xs text-gray-500">{professional.especialidade || 'Sem especialidade'}</span>
+                        <span className="font-medium">{professional.name}</span>
+                        <span className="block text-xs text-gray-500">{professional.specialty || 'Sem especialidade'}</span>
                       </button>
                     ))}
                   </div>
@@ -347,14 +354,14 @@ export default function RecepcionistaResumoUBS() {
                           <td className="px-4 py-4 text-sm text-gray-700">
                             <div className="flex flex-col">
                               <span className="font-semibold text-gray-900">
-                                {(appointment as any).professionals?.nome || appointment.professional_name || 'Não informado'}
+                                {appointment.professionals?.name || 'Não informado'}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {(appointment as any).professionals?.especialidade || (appointment.specialty && appointment.specialty.length > 30 ? 'Consultar' : appointment.specialty)}
+                                {appointment.professionals?.specialty || (appointment.specialty && appointment.specialty.length > 30 ? 'Consultar' : appointment.specialty)}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-sm text-gray-700">{(appointment as any).patients?.name || 'Não informado'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700">{appointment.patients?.name || 'Não informado'}</td>
                           <td className="px-4 py-4">
                             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.classes}`}>{status.label}</span>
                           </td>
@@ -382,7 +389,7 @@ export default function RecepcionistaResumoUBS() {
               <Users className="text-blue-500 h-6 w-6" />
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Profissionais da UBS</h2>
-                <p className="text-sm text-gray-500">Especialidade e CRM/CRF dos profissionais vinculados.</p>
+                <p className="text-sm text-gray-500">Especialidade dos profissionais vinculados.</p>
               </div>
             </div>
 
@@ -396,13 +403,14 @@ export default function RecepcionistaResumoUBS() {
                   <div key={professional.cns} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">{professional.nome}</p>
-                        <p className="text-sm text-gray-500">{professional.especialidade || 'Sem especialidade'}</p>
+                        <p className="text-sm font-semibold text-gray-800">{professional.name}</p>
+                        <p className="text-sm text-gray-500">{professional.specialty || 'Sem especialidade'}</p>
                       </div>
                     </div>
-                    <div className="mt-3 flex flex-col gap-1 text-sm text-gray-600">
-                      <p>CRM/CRF: {professional.crm_crf || 'Não informado'}</p>
-                    </div>
+                    {/* Exibir o CRM ou CRF do profissional*/}
+                    {/* <div className="mt-3 flex flex-col gap-1 text-sm text-gray-600"> */}
+                    {/* <p>CRM/CRF: {professional.crm_crf || 'Não informado'}</p> */}
+                    {/* </div> */}
                   </div>
                 ))
               )}

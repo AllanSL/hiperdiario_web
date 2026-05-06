@@ -199,7 +199,7 @@ export default function ProfissionalPacientes() {
         .from('clinical_notes')
         .select(`
           *,
-          professionals ( nome, especialidade )
+          professionals ( name, specialty )
         `)
         .eq('patient_id', patientId)
         .order('created_at', { ascending: false });
@@ -521,12 +521,12 @@ export default function ProfissionalPacientes() {
                                         {new Date(note.created_at).toLocaleDateString('pt-BR')} às {new Date(note.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                       <span className="text-sm font-semibold text-indigo-700">
-                                        Dr(a). {note.professionals?.nome || 'Profissional'} 
-                                        <span className="font-normal text-gray-500 ml-1">({note.professionals?.especialidade || 'Clínico'})</span>
+                                        Dr(a). {note.professionals?.name || 'Profissional'}
+                                        <span className="font-normal text-gray-500 ml-1">({note.professionals?.specialty || 'Clínico'})</span>
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   {/* Sinais Vitais */}
                                   {note.vital_signs && typeof note.vital_signs === 'object' && Object.keys(note.vital_signs).length > 0 && (
                                     <div className="flex flex-wrap gap-3 mb-3 p-2 bg-gray-50 rounded-md">

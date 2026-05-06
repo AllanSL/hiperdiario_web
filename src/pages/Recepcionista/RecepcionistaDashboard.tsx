@@ -112,7 +112,7 @@ export default function RecepcionistaDashboard() {
             <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800">Painel da Recepção</h1>
                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium">{profile?.nome}</span>
+                    <span className="text-sm text-gray-600 font-medium">{profile?.name}</span>
                     <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer">
                         <LogOut size={18} /> Sair
                     </button>
@@ -133,7 +133,7 @@ export default function RecepcionistaDashboard() {
                         <div className="rounded-3xl border border-gray-200 bg-gray-50 p-4">
                             <h3 className="text-sm font-medium text-gray-600">Unidade</h3>
                             <p className="mt-2 text-base font-semibold text-gray-900">
-                                {unitInfoLoading ? 'Carregando...' : unitInfo?.name ? capitalizeText(unitInfo.name) : 'Não disponível'}
+                                {unitInfoLoading ? 'Carregando...' : unitInfo?.name ? CnesService.formatCnesDisplayName(capitalizeText((unitInfo.name))) : 'Não disponível'}
                             </p>
                         </div>
                         <div className="rounded-3xl border border-gray-200 bg-gray-50 p-4">

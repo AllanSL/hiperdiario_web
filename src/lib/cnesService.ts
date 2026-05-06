@@ -12,8 +12,8 @@ export interface CnesEstabelecimento {
 }
 
 export interface CnesProfissional {
-    nome: string;
-    especialidade: string;
+    name: string;
+    specialty: string;
     cns: string;
 }
 
@@ -195,7 +195,7 @@ export class CnesService {
 
                     data.forEach((e: any) => {
                         let cbo = (e.dsCbo || '').trim().toUpperCase();
-                        const nome = (e.nome || '').trim();
+                        const nome = (e.name || '').trim();
                         const cns = (e.cns || '').trim();
 
                         if (!cbo || !nome || !cns) return;
@@ -225,13 +225,13 @@ export class CnesService {
 
                             const key = `${cns}`;
                             if (!profissionaisMap.has(key)) {
-                                profissionaisMap.set(key, { nome, especialidade: cbo, cns });
+                                profissionaisMap.set(key, { name: nome, specialty: cbo, cns });
                             }
                         }
                     });
 
                     return Array.from(profissionaisMap.values()).sort((a, b) =>
-                        `${a.especialidade} - ${a.nome}`.localeCompare(`${b.especialidade} - ${b.nome}`)
+                        `${a.specialty} - ${a.name}`.localeCompare(`${b.specialty} - ${b.name}`)
                     );
                 }
             }

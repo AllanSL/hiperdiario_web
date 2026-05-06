@@ -63,7 +63,7 @@ export class AppointmentService {
 
       let query = supabase
         .from('appointments')
-        .select('id, date_time, status, notes, cnes_id, specialty, professional_name, patient_id, shift, patients(name, cpf)')
+        .select('id, date_time, status, notes, cnes_id, specialty, professional_cns, patient_id, shift, patients(name, cpf), professionals(name, specialty)')
         .eq('cnes_id', cnes_id)
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
@@ -98,7 +98,7 @@ export class AppointmentService {
         notes: appointmentData.notes || '',
         cnes_id: appointmentData.cnes_id || 'Não informado',
         specialty: appointmentData.specialty || '',
-        professional_name: appointmentData.professional_name || '',
+        professional_cns: appointmentData.professional_cns || null,
         patient_id: appointmentData.patient_id,
         shift: appointmentData.shift || 'morning',
       };

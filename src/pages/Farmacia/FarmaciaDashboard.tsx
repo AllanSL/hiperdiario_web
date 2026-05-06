@@ -1191,7 +1191,7 @@ export default function FarmaciaDashboard() {
                     <h1 className="text-xl font-bold text-gray-800">Painel da Farmácia</h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium hidden sm:inline">{profile?.nome}</span>
+                    <span className="text-sm text-gray-600 font-medium hidden sm:inline">{profile?.name}</span>
                     <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer text-sm font-medium">
                         <LogOut size={18} /> Sair
                     </button>

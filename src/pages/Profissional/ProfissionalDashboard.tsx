@@ -49,7 +49,7 @@ export default function ProfissionalDashboard() {
             <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800">Painel do Profissional de Saúde</h1>
                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium">{profile?.nome}</span>
+                    <span className="text-sm text-gray-600 font-medium">{profile?.name}</span>
                     <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer">
                         <LogOut size={18} /> Sair
                     </button>

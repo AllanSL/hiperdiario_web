@@ -10,8 +10,8 @@ import { AppointmentService } from '../../lib/appointmentService';
 
 type Professional = {
   user_id?: string;
-  nome: string;
-  especialidade: string;
+  name: string;
+  specialty: string;
   cns: string;
 };
 
@@ -26,25 +26,28 @@ type Appointment = {
   date_time: string;
   status: string | null;
   notes?: string;
-  location?: string;
+  cnes_id?: string;
   specialty?: string;
-  professional_name?: string;
   professional_cns?: string;
   patient_id?: string;
   shift?: string;
   patients?: Patient | Patient[];
+  professionals?: {
+    name: string;
+    specialty: string;
+  };
 };
 
 type BlockedTime = {
   id: string;
   date_time: string;
-  location?: string;
+  cnes_id?: string;
   professional_cns?: string;
   reason?: string;
   shift?: string;
   professionals?: {
-    nome: string;
-    especialidade: string;
+    name: string;
+    specialty: string;
   };
 };
 
@@ -86,7 +89,7 @@ export default function RecepcionistaAgenda() {
     message: string;
     onConfirm: () => void;
     danger?: boolean;
-  }>({ show: false, title: '', message: '', onConfirm: () => {} });
+  }>({ show: false, title: '', message: '', onConfirm: () => { } });
 
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -114,6 +117,13 @@ export default function RecepcionistaAgenda() {
   const [blockingDate, setBlockingDate] = useState(false);
   const [blockReason, setBlockReason] = useState('Bloqueio de agenda');
 
+  // Filtros para a visão da Unidade (quando nenhum profissional está selecionado)
+  const [unitFilterShift, setUnitFilterShift] = useState<ShiftType | 'all'>('all');
+  const [unitFilterProfessionalCns, setUnitFilterProfessionalCns] = useState<string>('all');
+
+  // Filtro para a visão do Profissional (quando um profissional está selecionado)
+  const [dateFilterShift, setDateFilterShift] = useState<ShiftType | 'all'>('all');
+
 
 
 
@@ -122,9 +132,9 @@ export default function RecepcionistaAgenda() {
       setLoading(true);
       const profResult = await supabase
         .from('professionals')
-        .select('user_id, nome, especialidade, cns')
+        .select('user_id, name, specialty, cns')
         .eq('cnes', profile?.cnes)
-        .order('nome', { ascending: true });
+        .order('name', { ascending: true });
 
       if (profResult.error) throw profResult.error;
 
@@ -132,7 +142,8 @@ export default function RecepcionistaAgenda() {
         .from('appointments')
         .select(`
           *,
-          patients ( name, cpf )
+          patients ( name, cpf ),
+          professionals ( name, specialty )
         `)
         .eq('cnes_id', profile?.cnes)
         .gte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString())
@@ -141,7 +152,7 @@ export default function RecepcionistaAgenda() {
 
       const blockResult = await supabase
         .from('blocked_times')
-        .select('*, professionals(nome, especialidade)')
+        .select('*, professionals(name, specialty)')
         .eq('cnes_id', profile?.cnes)
         .gte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString())
         .lte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59).toISOString())
@@ -156,21 +167,21 @@ export default function RecepcionistaAgenda() {
 
       // Filtro de ocupações de saúde
       const healthKeywords = ['MEDICO', 'MÉDICO', 'DENTISTA', 'PSICOLOGO', 'PSICÓLOGO', 'NUTRICIONISTA', 'PSIQUIATRA', 'GINECOLOGISTA', 'FISIOTERAPEUTA'];
-      const isHealthProf = (especialidade: string) => {
-        const upper = especialidade.toUpperCase();
+      const isHealthProf = (specialty: string) => {
+        const upper = specialty.toUpperCase();
         return healthKeywords.some(key => upper.includes(key));
       };
 
       // Mescla profissionais do banco com profissionais do CNES usando CNS como chave
       const dbProfs = profResult.data || [];
       const mergedProfs: Professional[] = cnesProfs
-        .filter(cp => isHealthProf(cp.especialidade))
+        .filter(cp => isHealthProf(cp.specialty))
         .map(cp => {
           const matchingDb = dbProfs.find(p => p.cns === cp.cns);
           return {
             user_id: matchingDb?.user_id,
-            nome: cp.nome,
-            especialidade: cp.especialidade,
+            name: cp.name,
+            specialty: cp.specialty,
             cns: cp.cns
           };
         });
@@ -178,11 +189,11 @@ export default function RecepcionistaAgenda() {
       // Adiciona profissionais do banco que não estão no CNES (também filtrando por especialidade)
       dbProfs.forEach(dp => {
         if (dp.cns && !mergedProfs.find(mp => mp.cns === dp.cns)) {
-          if (isHealthProf(dp.especialidade || '')) {
+          if (isHealthProf(dp.specialty || '')) {
             mergedProfs.push({
               user_id: dp.user_id,
-              nome: dp.nome,
-              especialidade: dp.especialidade || 'Outros',
+              name: dp.name,
+              specialty: dp.specialty || 'Outros',
               cns: dp.cns
             });
           }
@@ -239,14 +250,14 @@ export default function RecepcionistaAgenda() {
   const specialties = useMemo(() => {
     const s = new Set<string>();
     professionals.forEach(p => {
-      if (p.especialidade) s.add(p.especialidade);
+      if (p.specialty) s.add(p.specialty);
     });
     return Array.from(s).sort();
   }, [professionals]);
 
   const filteredProfessionalsBySpecialty = useMemo(() => {
     if (!selectedSpecialty) return professionals;
-    return professionals.filter(p => p.especialidade === selectedSpecialty);
+    return professionals.filter(p => p.specialty === selectedSpecialty);
   }, [professionals, selectedSpecialty]);
 
 
@@ -274,7 +285,7 @@ export default function RecepcionistaAgenda() {
       professionalCns: profCns,
       date: aptDate.toISOString().split('T')[0],
       shift: shift as ShiftType,
-      location: apt.location || profile?.cnes || '',
+      location: apt.cnes_id || profile?.cnes || '',
       notes: apt.notes || '',
       status: apt.status || 'scheduled',
     });
@@ -286,10 +297,14 @@ export default function RecepcionistaAgenda() {
     setShowAppointmentModal(false);
     setActiveDropdown(null);
     setMiniCalendarMonth(selectedDate);
+    const now = new Date();
+    const isToday = selectedDate.toDateString() === now.toDateString();
+    const defaultShift = (isToday && now.getHours() >= 13) ? 'afternoon' : 'morning';
+
     setAppointmentForm((prev) => ({
       ...prev,
       date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
-      shift: 'morning',
+      shift: defaultShift as 'morning' | 'afternoon',
       location: profile?.cnes || '',
       notes: '',
       status: 'scheduled',
@@ -299,10 +314,7 @@ export default function RecepcionistaAgenda() {
   const filteredAppointments = useMemo(() => {
     if (!selectedProfessionalCns) return appointments;
     return appointments.filter((apt) => {
-      if (apt.professional_cns) return apt.professional_cns === selectedProfessionalCns;
-      // Fallback para nome/especialidade em registros antigos
-      const [nome] = (selectedProfessional?.nome || '').split(' ');
-      return apt.professional_name?.includes(nome) && apt.specialty?.includes(selectedProfessional?.especialidade || '');
+      return apt.professional_cns === selectedProfessionalCns;
     });
   }, [appointments, selectedProfessionalCns, selectedProfessional]);
 
@@ -310,7 +322,7 @@ export default function RecepcionistaAgenda() {
     if (!selectedProfessionalCns) return blockedTimes;
     return blockedTimes.filter((blk) => {
       if (blk.professional_cns) return blk.professional_cns === selectedProfessionalCns;
-      return blk.professionals?.nome === selectedProfessional?.nome;
+      return blk.professionals?.name === selectedProfessional?.name;
     });
   }, [blockedTimes, selectedProfessionalCns, selectedProfessional]);
 
@@ -335,6 +347,32 @@ export default function RecepcionistaAgenda() {
       );
     });
   }, [filteredBlockedTimes, selectedDate]);
+
+  // Listas finais filtradas para exibição
+  const finalFilteredAppointments = useMemo(() => {
+    return selectedDateAppointments.filter(apt => {
+      // Filtro de turno
+      const currentShiftFilter = selectedProfessionalCns ? dateFilterShift : unitFilterShift;
+      const matchesShift = currentShiftFilter === 'all' || apt.shift === currentShiftFilter;
+
+      // Filtro de profissional (apenas se não houver um profissional selecionado globalmente)
+      const matchesProfessional = selectedProfessionalCns || unitFilterProfessionalCns === 'all' || apt.professional_cns === unitFilterProfessionalCns;
+
+      return matchesShift && matchesProfessional;
+    });
+  }, [selectedDateAppointments, selectedProfessionalCns, dateFilterShift, unitFilterShift, unitFilterProfessionalCns]);
+
+  const finalFilteredBlocks = useMemo(() => {
+    return selectedDateBlocks.filter(blk => {
+      // Filtro de turno
+      const matchesShift = unitFilterShift === 'all' || blk.shift === unitFilterShift;
+
+      // Filtro de profissional
+      const matchesProfessional = unitFilterProfessionalCns === 'all' || blk.professional_cns === unitFilterProfessionalCns;
+
+      return matchesShift && matchesProfessional;
+    });
+  }, [selectedDateBlocks, unitFilterShift, unitFilterProfessionalCns]);
 
   const getPatientRecord = (patients?: Patient | Patient[] | null) => {
     if (!patients) return null;
@@ -376,7 +414,21 @@ export default function RecepcionistaAgenda() {
     }
     const professional = selectedProfessional;
     const dateTime = calculateDateTimeFromShift(appointmentForm.date, appointmentForm.shift);
-    
+
+    // Validação de data e turno retroativos
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    if (appointmentForm.date < todayStr) {
+      showNotification('error', 'Não é possível realizar agendamentos em datas retroativas.');
+      return;
+    }
+
+    if (appointmentForm.date === todayStr && appointmentForm.shift === 'morning' && now.getHours() >= 13) {
+      showNotification('error', 'O turno da manhã não está mais disponível para agendamento hoje.');
+      return;
+    }
+
     try {
       setCreatingAppointment(true);
 
@@ -384,7 +436,7 @@ export default function RecepcionistaAgenda() {
       if (!editingAppointment) {
         const availability = await AppointmentService.checkAvailability(
           profile?.cnes || '',
-          professional?.especialidade || '',
+          professional?.specialty || '',
           appointmentForm.shift,
           appointmentForm.date,
           professional?.cns
@@ -401,8 +453,7 @@ export default function RecepcionistaAgenda() {
         status: appointmentForm.status,
         notes: appointmentForm.notes,
         cnes_id: profile?.cnes || '',
-        specialty: professional ? `${professional.especialidade} - ${professional.nome}` : '',
-        professional_name: professional?.nome || '',
+        specialty: professional?.specialty || '',
         professional_cns: professional?.cns || null,
         patient_id: selectedPatient.id,
         shift: appointmentForm.shift,
@@ -420,6 +471,8 @@ export default function RecepcionistaAgenda() {
       }
 
       setPatientSearch('');
+      setSelectedPatient(null);
+      setShowAppointmentModal(false);
       fetchData();
     } catch (err: any) {
       console.error('Erro ao agendar consulta:', err);
@@ -482,12 +535,12 @@ export default function RecepcionistaAgenda() {
         const block = {
           date_time: new Date(`${selectedDate.toISOString().split('T')[0]}T00:00:00`).toISOString(),
           professional_cns: isUnitBlock ? null : selectedProfessional?.cns || null,
-          location: profile?.cnes || '',
+          cnes_id: profile?.cnes || '',
           reason: blockReason || (isUnitBlock ? 'Bloqueio de unidade' : `Bloqueio de agenda`),
         };
         const { error } = await supabase.from('blocked_times').insert([block]);
         if (error) throw error;
-        showNotification('success', `Data bloqueada para ${isUnitBlock ? 'todos os profissionais da unidade' : selectedProfessional?.nome}.`);
+        showNotification('success', `Data bloqueada para ${isUnitBlock ? 'todos os profissionais da unidade' : selectedProfessional?.name}.`);
         setBlockReason('');
         fetchData();
       } catch (err: any) {
@@ -503,7 +556,7 @@ export default function RecepcionistaAgenda() {
       setConfirmModal({
         show: true,
         title: 'Liberar Bloqueio',
-        message: `Deseja liberar o bloqueio desta data para ${isUnitBlock ? 'toda a unidade' : selectedProfessional?.nome}?`,
+        message: `Deseja liberar o bloqueio desta data para ${isUnitBlock ? 'toda a unidade' : selectedProfessional?.name}?`,
         onConfirm: async () => {
           try {
             const ids = currentBlocks.map((blk) => blk.id);
@@ -526,7 +579,7 @@ export default function RecepcionistaAgenda() {
       title: 'Confirmar Bloqueio',
       message: hasAppointments
         ? `Existem ${selectedDateAppointments.length} consultas agendadas. O bloqueio impedirá NOVAS marcações, mas as existentes permanecerão. Deseja continuar?`
-        : `Deseja bloquear a agenda para ${isUnitBlock ? 'toda a unidade' : selectedProfessional?.nome} nesta data?`,
+        : `Deseja bloquear a agenda para ${isUnitBlock ? 'toda a unidade' : selectedProfessional?.name} nesta data?`,
       danger: hasAppointments,
       onConfirm: confirmBlock
     });
@@ -590,7 +643,7 @@ export default function RecepcionistaAgenda() {
                     <div className="flex-1">
                       <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                         <Ban className="text-red-600" size={20} />
-                        {isUnitBlock ? 'Bloquear Toda a Unidade' : `Bloquear Agenda: ${formatCapitalize(selectedProfessional?.nome || '')}`}
+                        {isUnitBlock ? 'Bloquear Toda a Unidade' : `Bloquear Agenda: ${formatCapitalize(selectedProfessional?.name || '')}`}
                       </h3>
                       <p className="text-sm text-gray-500 mt-1">
                         {isUnitBlock
@@ -694,7 +747,7 @@ export default function RecepcionistaAgenda() {
                           className={`flex items-center justify-between w-full rounded-xl border shadow-sm p-3 transition text-left bg-white ${activeDropdown === 'professional' ? 'border-green-500 ring-1 ring-green-500' : 'border-gray-300'}`}
                         >
                           <span className="text-base font-medium text-gray-800">
-                            {selectedProfessionalCns ? formatCapitalize(professionals.find(p => p.cns === selectedProfessionalCns)?.nome || '') : 'Nenhum profissional'}
+                            {selectedProfessionalCns ? formatCapitalize(professionals.find(p => p.cns === selectedProfessionalCns)?.name || '') : 'Nenhum profissional'}
                           </span>
                           <ChevronLeft size={18} className={`text-gray-400 transition-transform duration-200 ${activeDropdown === 'professional' ? 'rotate-90' : '-rotate-90'}`} />
                         </button>
@@ -717,7 +770,7 @@ export default function RecepcionistaAgenda() {
                                   onClick={() => { setSelectedProfessionalCns(prof.cns); setActiveDropdown(null); }}
                                   className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${selectedProfessionalCns === prof.cns ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
                                 >
-                                  {formatCapitalize(prof.nome)}
+                                  {formatCapitalize(prof.name)}
                                 </button>
                               ))}
                             </div>
@@ -799,8 +852,7 @@ export default function RecepcionistaAgenda() {
               <aside className="space-y-6 lg:col-span-3">
                 {selectedProfessionalCns ? (() => {
                   const profApts = selectedDateAppointments.filter(a => {
-                    if (a.professional_cns) return a.professional_cns === selectedProfessionalCns;
-                    return a.professional_name === selectedProfessional?.nome;
+                    return a.professional_cns === selectedProfessionalCns;
                   });
                   const morningApts = profApts.filter(a => a.shift === 'morning' || (!a.shift && new Date(a.date_time).getHours() < 12));
                   const afternoonApts = profApts.filter(a => a.shift === 'afternoon' || (!a.shift && new Date(a.date_time).getHours() >= 12));
@@ -811,8 +863,8 @@ export default function RecepcionistaAgenda() {
                       <section className="bg-white shadow rounded-lg p-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                           <div>
-                            <h2 className="text-xl font-bold text-gray-800">{selectedProfessional?.nome}</h2>
-                            <p className="text-sm text-gray-500">{selectedProfessional?.especialidade || 'Clínico Geral'}</p>
+                            <h2 className="text-xl font-bold text-gray-800">{selectedProfessional?.name}</h2>
+                            <p className="text-sm text-gray-500">{selectedProfessional?.specialty || 'Clínico Geral'}</p>
                             <p className="text-gray-600 mt-1 font-medium">{selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                           </div>
                           <div className="mt-4 sm:mt-0 flex gap-4">
@@ -841,12 +893,50 @@ export default function RecepcionistaAgenda() {
                       </section>
 
                       <section className="bg-white shadow rounded-lg p-6">
-                        <h3 className="font-semibold text-gray-800 mb-4 text-lg">Consultas da Data</h3>
-                        {profApts.length === 0 ? (
-                          <p className="text-sm text-gray-500">Nenhuma consulta agendada para este profissional nesta data.</p>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-semibold text-gray-800 text-lg">Consultas da Data</h3>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdown(activeDropdown === 'dateShift' ? null : 'dateShift')}
+                              className={`flex items-center justify-between min-w-[160px] gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${activeDropdown === 'dateShift' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:border-green-300'}`}
+                            >
+                              <span>{dateFilterShift === 'all' ? 'Todos os Turnos' : dateFilterShift === 'morning' ? 'Manhã' : 'Tarde'}</span>
+                              <ChevronRight size={14} className={`transition-transform ${activeDropdown === 'dateShift' ? 'rotate-90' : ''}`} />
+                            </button>
+
+                            {activeDropdown === 'dateShift' && (
+                              <>
+                                <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdown(null)} />
+                                <div className="absolute top-full right-0 mt-2 z-[60] bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden min-w-[150px] animate-in fade-in slide-in-from-top-2 duration-200">
+                                  <button
+                                    onClick={() => { setDateFilterShift('all'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-2.5 text-left text-sm hover:bg-green-50 transition ${dateFilterShift === 'all' ? 'bg-green-50 text-green-700 font-bold' : 'text-gray-700'}`}
+                                  >
+                                    Todos os Turnos
+                                  </button>
+                                  <button
+                                    onClick={() => { setDateFilterShift('morning'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-2.5 text-left text-sm hover:bg-green-50 transition border-t border-gray-100 ${dateFilterShift === 'morning' ? 'bg-green-50 text-green-700 font-bold' : 'text-gray-700'}`}
+                                  >
+                                    Manhã
+                                  </button>
+                                  <button
+                                    onClick={() => { setDateFilterShift('afternoon'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-2.5 text-left text-sm hover:bg-green-50 transition border-t border-gray-100 ${dateFilterShift === 'afternoon' ? 'bg-green-50 text-green-700 font-bold' : 'text-gray-700'}`}
+                                  >
+                                    Tarde
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {finalFilteredAppointments.length === 0 ? (
+                          <p className="text-sm text-gray-500">Nenhuma consulta agendada para este profissional nesta data com os filtros selecionados.</p>
                         ) : (
                           <ul className="space-y-3">
-                            {profApts.map((apt) => {
+                            {finalFilteredAppointments.map((apt) => {
                               return (
                                 <li key={apt.id} className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition">
                                   <div className="flex items-center justify-between gap-3">
@@ -863,17 +953,16 @@ export default function RecepcionistaAgenda() {
                                     </div>
                                     <div className="text-right text-sm text-gray-500 flex flex-col items-end gap-1">
                                       <p className="font-bold text-gray-700 text-base">{apt.shift === 'morning' ? 'Manhã' : 'Tarde'}</p>
-                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                        apt.status === 'checked_in' ? 'bg-blue-100 text-blue-700' :
+                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${apt.status === 'checked_in' ? 'bg-blue-100 text-blue-700' :
                                         apt.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
-                                        apt.status === 'attended' ? 'bg-green-100 text-green-700' :
-                                        apt.status === 'missed' ? 'bg-red-100 text-red-700' :
-                                        'bg-gray-100 text-gray-600'
-                                      }`}>
+                                          apt.status === 'attended' ? 'bg-green-100 text-green-700' :
+                                            apt.status === 'missed' ? 'bg-red-100 text-red-700' :
+                                              'bg-gray-100 text-gray-600'
+                                        }`}>
                                         {apt.status === 'checked_in' ? 'Na fila' :
-                                         apt.status === 'in_progress' ? 'Em atendimento' :
-                                         apt.status === 'attended' ? 'Atendido' :
-                                         apt.status === 'missed' ? 'Faltou' : 'Agendada'}
+                                          apt.status === 'in_progress' ? 'Em atendimento' :
+                                            apt.status === 'attended' ? 'Atendido' :
+                                              apt.status === 'missed' ? 'Faltou' : 'Agendada'}
                                       </span>
                                     </div>
                                   </div>
@@ -910,25 +999,107 @@ export default function RecepcionistaAgenda() {
                   <>
 
                     <section className="bg-white shadow rounded-lg p-6">
-                      <h2 className="text-lg font-semibold text-gray-800 mb-3">Bloqueios e Consultas na unidade</h2>
-                      {selectedDateBlocks.length === 0 && selectedDateAppointments.length === 0 ? (
-                        <p className="text-sm text-gray-500">Não há bloqueios nem consultas para esta data.</p>
+                      <div className="flex flex-col gap-4 mb-6">
+                        <h2 className="text-lg font-semibold text-gray-800">Bloqueios e Consultas na unidade</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Dropdown Turno Unidade */}
+                          <div className="relative">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Turno</label>
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdown(activeDropdown === 'unitShift' ? null : 'unitShift')}
+                              className={`flex items-center justify-between w-full rounded-xl border bg-white p-3 transition-all ${activeDropdown === 'unitShift' ? 'border-green-500 ring-2 ring-green-50' : 'border-gray-200 hover:border-green-300'}`}
+                            >
+                              <span className="text-sm font-semibold text-gray-700">
+                                {unitFilterShift === 'all' ? 'Todos os Turnos' : unitFilterShift === 'morning' ? 'Manhã' : 'Tarde'}
+                              </span>
+                              <ChevronRight size={16} className={`text-gray-400 transition-transform ${activeDropdown === 'unitShift' ? 'rotate-90' : ''}`} />
+                            </button>
+
+                            {activeDropdown === 'unitShift' && (
+                              <>
+                                <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdown(null)} />
+                                <div className="absolute top-full left-0 mt-2 z-[60] bg-white border border-gray-200 shadow-2xl rounded-xl overflow-hidden w-full animate-in fade-in slide-in-from-top-2 duration-200">
+                                  <button
+                                    onClick={() => { setUnitFilterShift('all'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition ${unitFilterShift === 'all' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                  >
+                                    Todos os Turnos
+                                  </button>
+                                  <button
+                                    onClick={() => { setUnitFilterShift('morning'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${unitFilterShift === 'morning' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                  >
+                                    Manhã
+                                  </button>
+                                  <button
+                                    onClick={() => { setUnitFilterShift('afternoon'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${unitFilterShift === 'afternoon' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                  >
+                                    Tarde
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Dropdown Profissional Unidade */}
+                          <div className="relative">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-1 block">Profissional</label>
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdown(activeDropdown === 'unitProf' ? null : 'unitProf')}
+                              className={`flex items-center justify-between w-full rounded-xl border bg-white p-3 transition-all ${activeDropdown === 'unitProf' ? 'border-green-500 ring-2 ring-green-50' : 'border-gray-200 hover:border-green-300'}`}
+                            >
+                              <span className="text-sm font-semibold text-gray-700 truncate mr-2">
+                                {unitFilterProfessionalCns === 'all' ? 'Todos os Profissionais' : formatCapitalize(professionals.find(p => p.cns === unitFilterProfessionalCns)?.name || '')}
+                              </span>
+                              <ChevronRight size={16} className={`text-gray-400 transition-transform ${activeDropdown === 'unitProf' ? 'rotate-90' : ''}`} />
+                            </button>
+
+                            {activeDropdown === 'unitProf' && (
+                              <>
+                                <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdown(null)} />
+                                <div className="absolute top-full left-0 mt-2 z-[60] bg-white border border-gray-200 shadow-2xl rounded-xl overflow-hidden w-full animate-in fade-in slide-in-from-top-2 duration-200 max-h-60 overflow-y-auto">
+                                  <button
+                                    onClick={() => { setUnitFilterProfessionalCns('all'); setActiveDropdown(null); }}
+                                    className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition ${unitFilterProfessionalCns === 'all' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                  >
+                                    Todos os Profissionais
+                                  </button>
+                                  {professionals.map((p) => (
+                                    <button
+                                      key={p.cns}
+                                      onClick={() => { setUnitFilterProfessionalCns(p.cns); setActiveDropdown(null); }}
+                                      className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${unitFilterProfessionalCns === p.cns ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                    >
+                                      {formatCapitalize(p.name)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {finalFilteredBlocks.length === 0 && finalFilteredAppointments.length === 0 ? (
+                        <p className="text-sm text-gray-500">Não há bloqueios nem consultas para esta data com os filtros selecionados.</p>
                       ) : (
                         <ul className="space-y-3">
-                          {selectedDateBlocks.map((blk) => (
+                          {finalFilteredBlocks.map((blk) => (
                             <li key={blk.id} className="rounded-lg border border-red-200 p-4 bg-red-50">
-                              <div className="font-semibold text-red-800">{blk.professionals?.nome || 'Bloqueio de Unidade'}</div>
-                              <div className="text-sm text-red-600">{blk.professionals?.especialidade || 'Todos'} • {blk.location}</div>
+                              <div className="font-semibold text-red-800">{blk.professionals?.name || 'Bloqueio de Unidade'}</div>
+                              <div className="text-sm text-red-600">{blk.professionals?.specialty || 'Todos'}</div>
                               {blk.reason && <p className="mt-2 text-sm text-red-700 font-medium">Motivo: {blk.reason}</p>}
                             </li>
                           ))}
-                          {selectedDateAppointments.map((apt) => {
+                          {finalFilteredAppointments.map((apt) => {
                             const aptDate = new Date(apt.date_time);
                             return (
                               <li key={apt.id} className="rounded-lg border border-gray-200 p-4 bg-white">
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
-                                    <p className="font-semibold text-gray-800">{apt.professional_name || apt.specialty}</p>
+                                    <p className="font-semibold text-gray-800">{apt.professionals?.name || apt.specialty}</p>
                                     {(() => {
                                       const patient = getPatientRecord(apt.patients);
                                       return (
@@ -937,7 +1108,7 @@ export default function RecepcionistaAgenda() {
                                     })()}
                                   </div>
                                   <div className="text-right text-sm text-gray-500">
-                                    <p className="font-bold">{aptDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                    <p className="font-bold">{apt.shift === 'morning' ? 'Manhã' : 'Tarde'}</p>
                                   </div>
                                 </div>
                               </li>
@@ -963,47 +1134,50 @@ export default function RecepcionistaAgenda() {
                   </div>
 
                   <div className="p-6 max-h-[80vh] overflow-y-auto">
-                    <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100 flex items-center gap-4">
+                    <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-300 flex items-center gap-4">
                       <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                        {selectedProfessional?.nome.charAt(0)}
+                        {selectedProfessional?.name.charAt(0)}
                       </div>
                       <div>
-                        <p className="font-bold text-green-900">{selectedProfessional?.nome}</p>
-                        <p className="text-sm text-green-700">{selectedProfessional?.especialidade} • {selectedDate.toLocaleDateString('pt-BR')}</p>
+                        <p className="font-bold text-green-900">{selectedProfessional?.name}</p>
+                        <p className="text-sm text-green-700">{selectedProfessional?.specialty} • {selectedDate.toLocaleDateString('pt-BR')}</p>
                       </div>
                     </div>
 
                     <form onSubmit={handleCreateAppointment} className="space-y-5">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente (Busca por CPF)</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={patientSearch}
-                            onChange={(e) => setPatientSearch(formatCPF(e.target.value))}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSearchPatient();
-                              }
-                            }}
-                            className="block w-full rounded-xl border border-gray-300 shadow-sm p-3 focus:border-green-500 focus:ring-green-500 bg-gray-50 text-base font-medium"
-                            placeholder="000.000.000-00"
-                            maxLength={14}
-                          />
-                          <button type="button" onClick={handleSearchPatient} disabled={patientLoading} className="inline-flex items-center justify-center rounded-xl bg-gray-800 px-4 text-white hover:bg-black transition disabled:opacity-50">
-                            <Search size={20} />
-                          </button>
-                        </div>
-                        {selectedPatient && (
-                          <div className="mt-3 flex items-center gap-3 p-3 bg-blue-50 text-blue-800 rounded-xl border border-blue-100">
-                            <div className="bg-blue-600 p-1.5 rounded-full text-white">
-                              <Users size={14} />
-                            </div>
-                            <span className="text-sm font-medium">Paciente: <strong>{selectedPatient.name}</strong></span>
+                      {!editingAppointment && (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente (Busca por CPF)</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={patientSearch}
+                              onChange={(e) => setPatientSearch(formatCPF(e.target.value))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSearchPatient();
+                                }
+                              }}
+                              className="block w-full rounded-xl border border-gray-300 shadow-sm p-3 focus:border-green-500 focus:ring-green-500 bg-gray-50 text-base font-medium"
+                              placeholder="000.000.000-00"
+                              maxLength={14}
+                            />
+                            <button type="button" onClick={handleSearchPatient} disabled={patientLoading} className="inline-flex items-center justify-center rounded-xl bg-gray-800 px-4 text-white hover:bg-black transition disabled:opacity-50">
+                              <Search size={20} />
+                            </button>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
+
+                      {selectedPatient && (
+                        <div className={`${!editingAppointment ? 'mt-3' : ''} flex items-center gap-3 p-3 bg-blue-50 text-blue-800 rounded-xl border border-blue-300`}>
+                          <div className="bg-blue-600 p-1.5 rounded-full text-white">
+                            <Users size={14} />
+                          </div>
+                          <span className="text-lg font-medium">Paciente: <strong>{selectedPatient.name}</strong></span>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="relative">
@@ -1042,6 +1216,10 @@ export default function RecepcionistaAgenda() {
                                     const daysInMonth = new Date(miniCalendarMonth.getFullYear(), miniCalendarMonth.getMonth() + 1, 0).getDate();
                                     const blanks = Array.from({ length: firstDay }, (_, i) => i);
                                     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+                                    const now = new Date();
+                                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
 
                                     return (
                                       <>
@@ -1049,6 +1227,7 @@ export default function RecepcionistaAgenda() {
                                         {days.map(d => {
                                           const date = new Date(miniCalendarMonth.getFullYear(), miniCalendarMonth.getMonth(), d);
                                           const isToday = new Date().toDateString() === date.toDateString();
+                                          const isPast = date < today;
                                           const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                                           const isSelected = appointmentForm.date === dateStr;
 
@@ -1056,13 +1235,19 @@ export default function RecepcionistaAgenda() {
                                             <button
                                               key={d}
                                               type="button"
+                                              disabled={isPast}
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                setAppointmentForm({ ...appointmentForm, date: dateStr });
+                                                const now = new Date();
+                                                let newShift = appointmentForm.shift;
+                                                if (dateStr === todayStr && now.getHours() >= 13) {
+                                                  newShift = 'afternoon';
+                                                }
+                                                setAppointmentForm({ ...appointmentForm, date: dateStr, shift: newShift });
                                                 setActiveDropdown(null);
                                               }}
                                               className={`h-8 w-8 flex items-center justify-center rounded-lg text-xs transition
-                                                ${isSelected ? 'bg-green-600 text-white font-bold shadow-md' : 'hover:bg-green-50 text-gray-700'}
+                                                ${isSelected ? 'bg-green-600 text-white font-bold shadow-md' : isPast ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-green-50 text-gray-700'}
                                                 ${isToday && !isSelected ? 'border border-green-200 text-green-700' : ''}
                                               `}
                                             >
@@ -1095,20 +1280,31 @@ export default function RecepcionistaAgenda() {
                             <>
                               <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdown(null)} />
                               <div className="absolute top-full left-0 mt-2 z-[60] bg-white border border-gray-200 shadow-2xl rounded-2xl overflow-hidden w-full animate-in fade-in slide-in-from-top-2 duration-200">
-                                <button
-                                  type="button"
-                                  onClick={() => { setAppointmentForm({ ...appointmentForm, shift: 'morning' }); setActiveDropdown(null); }}
-                                  className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition ${appointmentForm.shift === 'morning' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
-                                >
-                                  Manhã
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => { setAppointmentForm({ ...appointmentForm, shift: 'afternoon' }); setActiveDropdown(null); }}
-                                  className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${appointmentForm.shift === 'afternoon' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
-                                >
-                                  Tarde
-                                </button>
+                                {(() => {
+                                  const now = new Date();
+                                  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                  const isMorningDisabled = appointmentForm.date === todayStr && now.getHours() >= 13;
+
+                                  return (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={isMorningDisabled}
+                                        onClick={() => { setAppointmentForm({ ...appointmentForm, shift: 'morning' }); setActiveDropdown(null); }}
+                                        className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition ${appointmentForm.shift === 'morning' ? 'text-green-700 bg-green-50' : isMorningDisabled ? 'text-gray-300 cursor-not-allowed bg-gray-50' : 'text-gray-700'}`}
+                                      >
+                                        Manhã {isMorningDisabled && <span className="text-[10px] font-normal ml-2"></span>}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setAppointmentForm({ ...appointmentForm, shift: 'afternoon' }); setActiveDropdown(null); }}
+                                        className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${appointmentForm.shift === 'afternoon' ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                      >
+                                        Tarde
+                                      </button>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </>
                           )}

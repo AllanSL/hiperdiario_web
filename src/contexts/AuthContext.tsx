@@ -6,10 +6,10 @@ type UserProfile = {
     cns: string;
     user_id: string;
     role: 'recepcionista' | 'farmacia' | 'profissional_saude';
-    nome: string;
+    name: string;
     cnes?: string;
     ibge?: string;
-    especialidade?: string;
+    specialty?: string;
 };
 
 type AuthContextType = {

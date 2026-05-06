@@ -37,7 +37,7 @@ export default function ProfissionalAgenda() {
         date: '',
         location: '',
         specialty: '',
-        professionalName: profile?.nome || '',
+        professionalName: profile?.name || '',
         reason: '',
         shift: 'all' as 'morning' | 'afternoon' | 'all'
     });
@@ -71,8 +71,8 @@ export default function ProfissionalAgenda() {
         if (!profile) return;
         setBlockForm(prev => ({
             ...prev,
-            professionalName: profile.nome || prev.professionalName,
-            specialty: prev.specialty || profile.especialidade || prev.specialty,
+            professionalName: profile.name || prev.professionalName,
+            specialty: prev.specialty || profile.specialty || prev.specialty,
         }));
     }, [profile]);
 
@@ -111,7 +111,7 @@ export default function ProfissionalAgenda() {
                 setBlockForm(prev => ({
                     ...prev,
                     location: aptData[0].cnes_id || prev.location || '',
-                    specialty: prev.specialty || profile?.especialidade || aptData[0].specialty || ''
+                    specialty: prev.specialty || profile?.specialty || aptData[0].specialty || ''
                 }));
             }
 
@@ -268,7 +268,7 @@ export default function ProfissionalAgenda() {
         const formattedDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 
         let initialLocation = blockForm.location || ubsName || profile?.cnes || '';
-        const initialSpecialty = blockForm.specialty || profile?.especialidade || '';
+        const initialSpecialty = blockForm.specialty || profile?.specialty || '';
 
         // Try getting location from appointments if not available
         if (!initialLocation && appointments.length > 0) {
@@ -280,7 +280,7 @@ export default function ProfissionalAgenda() {
             date: formattedDate,
             location: initialLocation,
             specialty: initialSpecialty,
-            professionalName: profile?.nome || prev.professionalName,
+            professionalName: profile?.name || prev.professionalName,
             reason: '',
             shift: 'all'
         }));

@@ -9,12 +9,12 @@ export interface Appointment {
   notes?: string;
   cnes_id?: string;
   specialty?: string;
-  professional_name?: string;
   professional_cns?: string;
   patient_id?: string;
   shift?: ShiftType;
   checked_in_at?: string | null;
   patients?: Patient | Patient[];
+  professionals?: Professional;
 }
 
 export interface Patient {
@@ -26,11 +26,13 @@ export interface Patient {
 }
 
 export interface Professional {
-  id: string;
-  nome: string;
-  especialidade?: string;
+  user_id?: string;
+  name: string;
+  specialty?: string;
   cnes?: string;
-  cns?: string;
+  cns: string;
+  crm_crf?: string;
+  role?: string;
 }
 
 export interface BlockedTime {
@@ -41,8 +43,8 @@ export interface BlockedTime {
   shift?: ShiftType | 'all';
   reason?: string;
   professionals?: {
-    nome: string;
-    especialidade: string;
+    name: string;
+    specialty: string;
   };
 }
 

@@ -109,8 +109,8 @@ export default function Register() {
         setLoading(false);
     };
 
-    const mapEspecialidadeToRole = (especialidade: string): 'recepcionista' | 'farmacia' | 'profissional_saude' => {
-        const esp = especialidade.toUpperCase();
+    const mapEspecialidadeToRole = (specialty: string): 'recepcionista' | 'farmacia' | 'profissional_saude' => {
+        const esp = specialty.toUpperCase();
         if (esp.includes('RECEPCIONISTA')) return 'recepcionista';
         if (esp.includes('FARMACEUTICO') || esp.includes('FARMACÊUTICO')) return 'farmacia';
         return 'profissional_saude';
@@ -132,7 +132,7 @@ export default function Register() {
         setLoading(true);
 
         const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.app`;
-        const role = mapEspecialidadeToRole(selectedProfissional.especialidade);
+        const role = mapEspecialidadeToRole(selectedProfissional.specialty);
 
         try {
             const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -158,7 +158,7 @@ export default function Register() {
                         address: selectedEstabelecimento.endereco,
                         latitude: selectedEstabelecimento.latitude || null,
                         longitude: selectedEstabelecimento.longitude || null,
-                        uf: selectedEstabelecimento.uf?.toString() || uf.toString(),
+                        state_code: selectedEstabelecimento.uf?.toString() || uf.toString(),
                         phone: selectedEstabelecimento.phone || null
                     });
                 }
@@ -168,13 +168,13 @@ export default function Register() {
                     .insert({
                         user_id: authData.user.id,
                         cns: selectedProfissional.cns,
-                        nome: selectedProfissional.nome,
+                        name: selectedProfissional.name,
                         cpf: cpf.replace(/\D/g, ''),
                         role: role,
                         crm_crf: crmCrf,
                         ibge: municipio.toString(),
                         cnes: selectedEstabelecimento.codigoCnes.toString(),
-                        especialidade: selectedProfissional.especialidade,
+                        specialty: selectedProfissional.specialty,
                     });
 
                 if (insertError) throw insertError;
@@ -278,15 +278,15 @@ export default function Register() {
                             <div className="w-full min-w-0">
                                 <label className="block text-sm font-medium text-gray-700 truncate">Selecione o seu Perfil</label>
                                 <CustomSelect
-                                    value={selectedProfissional ? `${selectedProfissional.especialidade} - ${selectedProfissional.nome}` : ''}
+                                    value={selectedProfissional ? `${selectedProfissional.specialty} - ${selectedProfissional.name}` : ''}
                                     onChange={(val) => {
-                                        const prof = profissionais.find(p => `${p.especialidade} - ${p.nome}` === val);
+                                        const prof = profissionais.find(p => `${p.specialty} - ${p.name}` === val);
                                         if (prof) setSelectedProfissional(prof);
                                     }}
                                     placeholder="Escolha"
                                     options={profissionais.map(prof => ({
-                                        value: `${prof.especialidade} - ${prof.nome}`,
-                                        label: `${prof.especialidade} - ${prof.nome}`
+                                        value: `${prof.specialty} - ${prof.name}`,
+                                        label: `${prof.specialty} - ${prof.name}`
                                     }))}
                                 />
                             </div>
@@ -323,8 +323,8 @@ export default function Register() {
                                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
                                         />
                                     </div>
-                                    {(mapEspecialidadeToRole(selectedProfissional.especialidade) === 'profissional_saude' ||
-                                        mapEspecialidadeToRole(selectedProfissional.especialidade) === 'farmacia') && (
+                                    {(mapEspecialidadeToRole(selectedProfissional.specialty) === 'profissional_saude' ||
+                                        mapEspecialidadeToRole(selectedProfissional.specialty) === 'farmacia') && (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">CRM / CRF (Opcional)</label>
                                                 <input
