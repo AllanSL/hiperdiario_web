@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Search, X, Pill, AlertCircle, Check } from 'lucide-react';
+import { ArrowLeft, Search, X, Pill, AlertCircle, Check, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 function formatCpf(cpf?: string | number | null) {
@@ -56,6 +56,8 @@ export default function ProfissionalPacientes() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [medicinesLoading, setMedicinesLoading] = useState<Set<string>>(new Set());
+  const [clinicalNotes, setClinicalNotes] = useState<Record<string, any[]>>({});
+  const [notesLoading, setNotesLoading] = useState<Set<string>>(new Set());
   const { showNotification } = useNotification();
   const [expandedPatient, setExpandedPatient] = useState<string | null>(null);
   const [editingDiseases, setEditingDiseases] = useState<string | null>(null);
@@ -101,8 +103,9 @@ export default function ProfissionalPacientes() {
 
   // Handler explícito para buscar — limpa cache e fecha card somente quando o usuário buscar
   const handleSearch = async () => {
-    // Limpa o cache de medicamentos e fecha o card expandido
+    // Limpa o cache de medicamentos, notas e fecha o card expandido
     setMedicines({});
+    setClinicalNotes({});
     setExpandedPatient(null);
     await fetchPatients();
   };
@@ -189,6 +192,31 @@ export default function ProfissionalPacientes() {
     }
   };
 
+  const fetchClinicalNotes = async (patientId: string) => {
+    try {
+      setNotesLoading(prev => new Set(prev).add(patientId));
+      const { data, error } = await supabase
+        .from('clinical_notes')
+        .select(`
+          *,
+          professionals ( nome, especialidade )
+        `)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setClinicalNotes(prev => ({ ...prev, [patientId]: data || [] }));
+    } catch (err) {
+      console.error('Erro ao buscar notas clínicas:', err);
+    } finally {
+      setNotesLoading(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(patientId);
+        return newSet;
+      });
+    }
+  };
+
   const togglePatientExpanded = (patientId: string) => {
     if (expandedPatient === patientId) {
       setExpandedPatient(null);
@@ -196,6 +224,9 @@ export default function ProfissionalPacientes() {
       setExpandedPatient(patientId);
       if (!medicines[patientId]) {
         fetchPatientMedicines(patientId);
+      }
+      if (!clinicalNotes[patientId]) {
+        fetchClinicalNotes(patientId);
       }
     }
   };
@@ -465,6 +496,70 @@ export default function ProfissionalPacientes() {
                           <div className="flex items-center justify-center py-6 text-gray-500">
                             <AlertCircle size={18} className="mr-2" />
                             Nenhum medicamento ativo no momento.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Seção de Evoluções Clínicas */}
+                      <div className="border-t border-gray-200 pt-6">
+                        {notesLoading.has(patient.id) ? (
+                          <div className="flex items-center justify-center py-6">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                          </div>
+                        ) : clinicalNotes[patient.id] && clinicalNotes[patient.id].length > 0 ? (
+                          <div>
+                            <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <Activity size={18} className="text-green-600" />
+                              Histórico de Evoluções Clínicas
+                            </h4>
+                            <div className="space-y-4">
+                              {clinicalNotes[patient.id].map((note) => (
+                                <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                        {new Date(note.created_at).toLocaleDateString('pt-BR')} às {new Date(note.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                      <span className="text-sm font-semibold text-indigo-700">
+                                        Dr(a). {note.professionals?.nome || 'Profissional'} 
+                                        <span className="font-normal text-gray-500 ml-1">({note.professionals?.especialidade || 'Clínico'})</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Sinais Vitais */}
+                                  {note.vital_signs && typeof note.vital_signs === 'object' && Object.keys(note.vital_signs).length > 0 && (
+                                    <div className="flex flex-wrap gap-3 mb-3 p-2 bg-gray-50 rounded-md">
+                                      {Object.entries(note.vital_signs).map(([key, val]) => (
+                                        <div key={key} className="text-xs">
+                                          <span className="text-gray-500 uppercase font-bold">{key.replace('_', ' ')}:</span>
+                                          <span className="ml-1 text-gray-800 font-medium">{String(val)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-3">
+                                    {note.content}
+                                  </p>
+
+                                  {note.attention_points && note.attention_points.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {note.attention_points.map((point: string, idx: number) => (
+                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-xs font-medium">
+                                          <AlertCircle size={10} /> {point}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center py-6 text-gray-500">
+                            <Activity size={18} className="mr-2" />
+                            Nenhuma evolução clínica registrada.
                           </div>
                         )}
                       </div>

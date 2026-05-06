@@ -28,6 +28,16 @@ const defaultForm: PatientForm = {
   phone: ''
 };
 
+function formatCpf(cpf?: string | number | null) {
+  if (cpf === undefined || cpf === null) return '';
+  const s = String(cpf).replace(/\D/g, '');
+  if (!s) return '';
+  if (s.length <= 3) return s;
+  if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
+  if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+  return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
 export default function RecepcionistaPacientes() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -214,8 +224,8 @@ export default function RecepcionistaPacientes() {
                   ) : (
                     patients.map((patient) => (
                       <tr key={patient.id}>
-                        <td className="px-4 py-4 text-sm text-gray-700">{patient.name}</td>
-                        <td className="px-4 py-4 text-sm text-gray-700">{patient.cpf}</td>
+                        <td className="px-4 py-4 text-sm text-gray-700 font-medium">{patient.name}</td>
+                        <td className="px-4 py-4 text-sm text-gray-700">{formatCpf(patient.cpf)}</td>
                         <td className="px-4 py-4 text-sm text-gray-700">{Array.isArray(patient.diseases) ? patient.diseases.join(', ') : patient.diseases || '—'}</td>
                         <td className="px-4 py-4 text-sm text-gray-700 space-x-2">
                           <button onClick={() => handleEdit(patient)} className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-50 transition">
@@ -261,7 +271,7 @@ export default function RecepcionistaPacientes() {
                 <input
                   type="text"
                   value={form.cpf}
-                  onChange={(e) => setForm({ ...form, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                  onChange={(e) => setForm({ ...form, cpf: formatCpf(e.target.value) })}
                   className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-2 focus:border-green-500 focus:ring-green-500"
                   required
                 />
