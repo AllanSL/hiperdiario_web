@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, Save, AlertTriangle, Pill, X, Plus, Heart, Thermometer, Activity, Scale, History, User } from 'lucide-react';
+import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, AlertTriangle, Pill, X, Plus, Activity, History, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { STATUS_CONFIG } from '../../lib/database.types';
 import type { VitalSigns, ClinicalNote } from '../../lib/database.types';

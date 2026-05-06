@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, Plus, Trash2, Ban, Search, Edit, ChevronLeft, ChevronRight, MapPin, Calendar, Users, UserCheck } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Ban, Search, Edit, ChevronLeft, ChevronRight, Calendar, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { calculateDateTimeFromShift, getShiftFromHour, type ShiftType } from '../../lib/database.types';
 import { CnesService } from '../../lib/cnesService';
@@ -689,7 +689,7 @@ export default function RecepcionistaAgenda() {
                               >
                                 Todas as especialidades
                               </button>
-                              {specialties.map((esp, idx) => (
+                              {specialties.map((esp) => (
                                 <button
                                   key={esp}
                                   type="button"
@@ -727,7 +727,7 @@ export default function RecepcionistaAgenda() {
                               >
                                 Nenhum profissional
                               </button>
-                              {filteredProfessionalsBySpecialty.map((prof, idx) => (
+                              {filteredProfessionalsBySpecialty.map((prof) => (
                                 <button
                                   key={prof.cns}
                                   type="button"
@@ -864,7 +864,6 @@ export default function RecepcionistaAgenda() {
                         ) : (
                           <ul className="space-y-3">
                             {profApts.map((apt) => {
-                              const aptDate = new Date(apt.date_time);
                               return (
                                 <li key={apt.id} className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition">
                                   <div className="flex items-center justify-between gap-3">

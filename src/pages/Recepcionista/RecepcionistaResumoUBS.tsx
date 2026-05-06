@@ -23,6 +23,7 @@ type AppointmentSummary = {
   specialty?: string;
   patient_id?: string;
   cnes_id?: string;
+  shift?: string;
 };
 
 
@@ -363,7 +364,6 @@ export default function RecepcionistaResumoUBS() {
                     </tr>
                   ) : (
                     filteredAppointments.map((appointment) => {
-                      const appointmentDate = new Date(appointment.date_time);
                       const timeText = appointment.shift === 'morning' ? 'Manhã' : 'Tarde';
                       const status = getStatusLabel(appointment.status);
 

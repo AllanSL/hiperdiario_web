@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { CnesService, type CnesHorario } from '../../lib/cnesService';
+import { CnesService } from '../../lib/cnesService';
 import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -10,7 +10,6 @@ export default function ProfissionalAgenda() {
     const navigate = useNavigate();
     const [appointments, setAppointments] = useState<any[]>([]);
     const [blockedTimes, setBlockedTimes] = useState<any[]>([]);
-    const [horariosUbs, setHorariosUbs] = useState<CnesHorario[]>([]);
     const [loading, setLoading] = useState(true);
     const [ubsName, setUbsName] = useState('');
     const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -58,9 +57,7 @@ export default function ProfissionalAgenda() {
         if (profile?.user_id) {
             fetchAgendaParaOMes(currentMonth);
             if (profile.ibge && profile.cnes) {
-                CnesService.buscarHorariosFuncionamento(profile.ibge, profile.cnes)
-                    .then(setHorariosUbs)
-                    .catch(console.error);
+                // Fetching removed as it was not being used
             }
         }
     }, [profile, currentMonth]);
@@ -126,7 +123,7 @@ export default function ProfissionalAgenda() {
             if (aptData && aptData.length > 0 && (!blockForm.location || !blockForm.specialty)) {
                 setBlockForm(prev => ({
                     ...prev,
-                    location: aptData[0].location || prev.location || '',
+                    location: aptData[0].cnes_id || prev.location || '',
                     specialty: prev.specialty || profile?.especialidade || aptData[0].specialty || ''
                 }));
             }
@@ -441,7 +438,6 @@ export default function ProfissionalAgenda() {
 
                                     {/* Mostrar agendamentos normais */}
                                     {selectedDateAppointments.map((apt) => {
-                                        const aptDate = new Date(apt.date_time);
                                         return (
                                             <li key={apt.id} className="p-6 hover:bg-gray-50 transition">
                                                 <div className="flex items-center justify-between">

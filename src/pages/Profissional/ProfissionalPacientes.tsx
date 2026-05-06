@@ -8,7 +8,7 @@ type Patient = {
   id: string;
   name: string;
   cpf: string;
-  diseases?: string[];
+  diseases?: string[] | string;
   phone?: string;
 };
 
@@ -54,11 +54,11 @@ export default function ProfissionalPacientes() {
 
   useEffect(() => {
     // Only fetch when there's a real change in the profile id.
-    if (!profile?.id) return;
-    if (lastProfileIdRef.current === profile.id) return;
-    lastProfileIdRef.current = profile.id;
+    if (!profile?.user_id) return;
+    if (lastProfileIdRef.current === profile.user_id) return;
+    lastProfileIdRef.current = profile.user_id;
     fetchPatients();
-  }, [profile?.id]);
+  }, [profile?.user_id]);
 
   useEffect(() => {
     if (!notification) return;
@@ -392,15 +392,16 @@ export default function ProfissionalPacientes() {
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            {patient.diseases && patient.diseases.length > 0 ? (
+                            {patient.diseases && (
                               <div className="flex flex-wrap gap-2 mb-4">
-                                {patient.diseases.map((disease) => (
+                                {(Array.isArray(patient.diseases) ? patient.diseases : [patient.diseases]).map((disease: string) => (
                                   <span key={disease} className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
                                     <Check size={14} /> {disease}
                                   </span>
                                 ))}
                               </div>
-                            ) : (
+                            )}
+                            {!patient.diseases && (
                               <p className="text-gray-500 text-sm">Nenhuma condição registrada</p>
                             )}
                             <button
