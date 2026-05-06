@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
-import { CnesService, type CnesHorario } from '../../lib/cnesService';
-import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck } from 'lucide-react';
+
+import { ArrowLeft, Users, ChevronDown, UserCheck } from 'lucide-react';
 
 type ProfessionalSummary = {
   cns: string;
@@ -35,28 +35,7 @@ type AppointmentSummary = {
 };
 
 
-const getTodayHorario = (horarios: CnesHorario[], date: Date = new Date()) => {
-  const dias = {
-    1: 'Segunda-Feira',
-    2: 'Terça-Feira',
-    3: 'Quarta-Feira',
-    4: 'Quinta-Feira',
-    5: 'Sexta-Feira',
-  } as const;
 
-  const diaSemana = dias[date.getDay() as keyof typeof dias];
-  if (!diaSemana) return 'Sem expediente';
-
-  const hoje = horarios.find((horario) => horario.diaSemana === diaSemana);
-  if (!hoje) return 'Sem expediente';
-
-  return `${diaSemana} ${hoje.hrInicioAtendimento} - ${hoje.hrFimAtendimento}`;
-};
-
-const getTodayHorarioLabel = (horarios: CnesHorario[]) => {
-  const horario = getTodayHorario(horarios);
-  return horario === 'Sem expediente' ? 'Funcionamento (Sem expediente)' : `Funcionamento (${horario})`;
-};
 
 const getStatusLabel = (status?: string) => {
   const normalized = status?.toLowerCase() || '';
@@ -73,11 +52,9 @@ export default function RecepcionistaResumoUBS() {
   const navigate = useNavigate();
   const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([]);
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
-  const [horariosUbs, setHorariosUbs] = useState<CnesHorario[]>([]);
   const [selectedProfessionalCns, setSelectedProfessionalCns] = useState<string>('');
   const [isProfessionalDropdownOpen, setIsProfessionalDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [horariosLoading, setHorariosLoading] = useState(false);
   const { showNotification } = useNotification();
   const professionalDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -140,18 +117,7 @@ export default function RecepcionistaResumoUBS() {
     fetchResumo();
   }, [profile]);
 
-  useEffect(() => {
-    if (!profile?.ibge || !profile?.cnes) return;
 
-    setHorariosLoading(true);
-    CnesService.buscarHorariosFuncionamento(profile.ibge, profile.cnes)
-      .then((data) => setHorariosUbs(data))
-      .catch((err) => {
-        console.error('Erro ao carregar horários da UBS:', err);
-        showNotification('error', 'Não foi possível carregar horários CNES.');
-      })
-      .finally(() => setHorariosLoading(false));
-  }, [profile?.ibge, profile?.cnes]);
 
 
 

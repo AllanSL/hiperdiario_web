@@ -1094,7 +1094,6 @@ export default function RecepcionistaAgenda() {
                             </li>
                           ))}
                           {finalFilteredAppointments.map((apt) => {
-                            const aptDate = new Date(apt.date_time);
                             return (
                               <li key={apt.id} className="rounded-lg border border-gray-200 p-4 bg-white">
                                 <div className="flex items-center justify-between gap-3">

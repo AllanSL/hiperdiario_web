@@ -63,7 +63,7 @@ export class AppointmentService {
 
       let query = supabase
         .from('appointments')
-        .select('id, date_time, status, notes, cnes_id, specialty, professional_cns, patient_id, shift, patients(name, cpf), professionals(name, specialty)')
+        .select('id, date_time, status, notes, cnes_id, specialty, professional_cns, patient_id, shift, patients(id, name, cpf), professionals(cns, name, specialty)')
         .eq('cnes_id', cnes_id)
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
@@ -77,7 +77,7 @@ export class AppointmentService {
 
       if (error) throw error;
 
-      return (data || []) as Appointment[];
+      return (data || []) as unknown as Appointment[];
     } catch (error: unknown) {
       console.error('Erro ao buscar agendamentos do dia:', error);
       return [];

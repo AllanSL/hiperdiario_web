@@ -1,5 +1,5 @@
-﻿import { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { ChevronDown, Search } from 'lucide-react';
 
 interface Option {
     value: string | number;
@@ -12,18 +12,31 @@ interface CustomSelectProps {
     options: Option[];
     placeholder: string;
     disabled?: boolean;
+    searchable?: boolean;
 }
 
-export function CustomSelect({ value, onChange, options, placeholder, disabled }: CustomSelectProps) {
+export function CustomSelect({ value, onChange, options, placeholder, disabled, searchable = true }: CustomSelectProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [focusedIndex, setFocusedIndex] = useState(-1);
+    const [dropDirection, setDropDirection] = useState<'down' | 'up'>('down');
     
     const wrapperRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
 
-    const selectedLabel = options.find((o) => o.value === value)?.label || '';
+    useEffect(() => {
+        if (open && wrapperRef.current) {
+            const rect = wrapperRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const hasSpaceBelow = spaceBelow > 300; // 300px threshold for the dropdown list
+            setDropDirection(hasSpaceBelow ? 'down' : 'up');
+        }
+    }, [open]);
+
+    const selectedOption = options.find((o) => o.value === value);
+    const selectedLabel = selectedOption?.label || '';
+
     const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
         if (wrapperRef.current && !wrapperRef.current.contains(e.relatedTarget as Node)) {
             setOpen(false);
@@ -31,15 +44,11 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
             setFocusedIndex(-1);
         }
     };
-    // Filtra as opÃ§Ãµes
+
     const filteredOptions = query === ''
         ? options
         : options.filter((opt) => opt.label.toLowerCase().includes(query.toLowerCase()));
 
-    // Não incluir o placeholder nas opções; placeholder só aparece no input quando não há seleção.
-    const allOptions = filteredOptions;
-
-    // Fecha o dropdown se clicar fora
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -52,12 +61,18 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Reseta o foco quando a pesquisa muda
     useEffect(() => {
         setFocusedIndex(-1);
     }, [query]);
 
-    // Rola a lista para mostrar o item focado
+    useEffect(() => {
+        if (open && wrapperRef.current) {
+            setTimeout(() => {
+                wrapperRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+    }, [open]);
+
     useEffect(() => {
         if (open && focusedIndex >= 0 && listRef.current) {
             const listElement = listRef.current;
@@ -85,7 +100,7 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
             if (!open) {
                 setOpen(true);
             } else {
-                setFocusedIndex((prev) => (prev < allOptions.length - 1 ? prev + 1 : prev));
+                setFocusedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
             }
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -94,11 +109,13 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
             }
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (open && focusedIndex >= 0 && focusedIndex < allOptions.length) {
-                onChange(allOptions[focusedIndex].value);
+            if (open && focusedIndex >= 0 && focusedIndex < filteredOptions.length) {
+                onChange(filteredOptions[focusedIndex].value);
                 setOpen(false);
                 setQuery('');
                 setFocusedIndex(-1);
+            } else if (!open) {
+                setOpen(true);
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
@@ -110,58 +127,77 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled }
 
     return (
         <div className="relative" ref={wrapperRef} onBlur={handleBlur} tabIndex={-1}>
-            <div className="relative w-full">
-                <input
-                    type="text"
-                    disabled={disabled}
-                    className="w-full rounded-lg border border-gray-300 shadow-sm focus:ring-1 focus:border-teal-500 focus:ring-teal-500 p-2.5 pl-3 pr-10 text-left bg-white text-base disabled:bg-gray-100 disabled:opacity-75 truncate cursor-text disabled:cursor-not-allowed text-gray-900 placeholder:text-gray-500 font-normal outline-none"
-                    placeholder={selectedLabel || placeholder}
-                    value={open ? query : selectedLabel}
-                    onFocus={() => { setOpen(true); setQuery(''); setFocusedIndex(-1); }}
-                        onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
-                    onKeyDown={handleKeyDown}
-                    ref={inputRef}
-                />
-                <button
-                    type="button"
-                    disabled={disabled}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 disabled:cursor-not-allowed"
-                    onClick={() => {
-                        if (!disabled) {
-                            const nextOpen = !open;
-                            setOpen(nextOpen);
-                            if (nextOpen) {
-                                setQuery('');
-                                setFocusedIndex(-1);
-                                inputRef.current?.focus();
-                            }
+            <div 
+                className={`flex items-center justify-between w-full rounded-xl border shadow-sm transition-all bg-gray-50 cursor-pointer overflow-hidden
+                    ${open ? 'border-green-500 ring-4 ring-green-50' : 'border-gray-200'}
+                    ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100' : 'hover:border-gray-300'}
+                `}
+                onClick={() => {
+                    if (!disabled) {
+                        const nextOpen = !open;
+                        setOpen(nextOpen);
+                        if (nextOpen && searchable) {
+                            setTimeout(() => inputRef.current?.focus(), 10);
                         }
-                    }}
-                >
-                    <ChevronDown className="h-5 w-5 text-gray-600" strokeWidth={1.5} />
-                </button>
+                    }
+                }}
+            >
+                <div className="flex-1 relative">
+                    {searchable && open ? (
+                        <div className="flex items-center pl-3">
+                            <Search size={16} className="text-gray-400 mr-2 shrink-0" />
+                            <input
+                                type="text"
+                                className="w-full bg-transparent p-3 pl-0 text-base font-medium text-gray-900 outline-none"
+                                placeholder="Pesquisar..."
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                ref={inputRef}
+                            />
+                        </div>
+                    ) : (
+                        <div className="p-3 pl-4 text-base font-medium text-gray-900 truncate">
+                            {selectedLabel || <span className="text-gray-400 font-normal">{placeholder}</span>}
+                        </div>
+                    )}
+                </div>
+                <div className="pr-3 flex items-center">
+                    <ChevronDown size={20} className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+                </div>
             </div>
 
             {open && !disabled && (
-                <ul ref={listRef} className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-[35vh] rounded-lg py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
-                {filteredOptions.length === 0 ? (
-                    <li className="relative py-2.5 pl-3 pr-9 text-gray-500 select-none text-base font-normal">Nenhuma opção encontrada...</li>
-                ) : (
-                    allOptions.map((opt, index) => (
-                        <li
-                            key={opt.value === '' ? 'placeholder' : opt.value}
-                            className={`font-normal text-base hover:cursor-pointer select-none relative py-2.5 pl-3 pr-9 transition-colors
-                                ${opt.value === value && focusedIndex !== index ? 'bg-teal-50 text-teal-900 font-medium' : 'text-gray-900'}
-                                ${focusedIndex === index ? 'bg-teal-600 text-white' : 'hover:bg-teal-50 hover:text-teal-900'}
-                            `}
-                            onClick={() => { onChange(opt.value); setOpen(false); setQuery(''); setFocusedIndex(-1); }}
-                            onMouseEnter={() => setFocusedIndex(index)}
-                        >
-                            {opt.label}
-                        </li>
-                    ))
-                )}
-            </ul>
+                <ul 
+                    ref={listRef} 
+                    className={`absolute z-50 w-full bg-white shadow-2xl max-h-[40vh] rounded-2xl text-base ring-1 ring-black ring-opacity-5 overflow-auto overflow-x-hidden focus:outline-none animate-in fade-in zoom-in duration-200
+                        ${dropDirection === 'up' ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'}
+                    `}
+                >
+                    {filteredOptions.length === 0 ? (
+                        <li className="px-4 py-3 text-gray-500 text-center text-sm">Nenhuma opção encontrada...</li>
+                    ) : (
+                        filteredOptions.map((opt, index) => (
+                            <li
+                                key={opt.value}
+                                className={`px-4 py-2.5 cursor-pointer transition-colors text-sm font-medium
+                                    ${opt.value === value ? 'bg-green-50 text-green-700' : 'text-gray-700'}
+                                    ${focusedIndex === index ? 'bg-green-600 text-white' : 'hover:bg-gray-50'}
+                                `}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onChange(opt.value);
+                                    setOpen(false);
+                                    setQuery('');
+                                    setFocusedIndex(-1);
+                                }}
+                                onMouseEnter={() => setFocusedIndex(index)}
+                            >
+                                {opt.label}
+                            </li>
+                        ))
+                    )}
+                </ul>
             )}
         </div>
     );
