@@ -251,6 +251,18 @@ export default function ProfissionalAgenda() {
 
 
 
+    const confirmUnblockOne = async (id: string) => {
+        try {
+            const { error } = await supabase.from('blocked_times').delete().eq('id', id);
+            if (error) throw error;
+            fetchAgendaParaOMes(currentMonth);
+            showNotification('success', 'Bloqueio removido com sucesso!');
+        } catch (err: any) {
+            console.error(err);
+            showNotification('error', 'Erro ao liberar o bloqueio: ' + err.message);
+        }
+    };
+
     const handleOpenBlockModal = () => {
         const d = selectedDate;
         const formattedDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
