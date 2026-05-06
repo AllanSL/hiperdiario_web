@@ -345,16 +345,30 @@ export default function RecepcionistaPacientes() {
 
         if (patientError) throw patientError;
 
-        // 2. Atualizar senha se fornecida
-        if (form.password && form.user_id) {
-          const { data, error: authError } = await supabase.functions.invoke('manage-patient-auth', {
-            body: {
-              action: 'update',
-              userId: form.user_id,
-              password: form.password
-            }
-          });
-          if (authError || data?.error) throw new Error(authError?.message || data?.error || 'Erro ao atualizar senha');
+        // 2. Lógica de Login (Auth)
+        if (form.password) {
+          // Se não tem user_id, precisamos CRIAR o login (mesmo em modo de edição)
+          if (!form.user_id) {
+            const { data, error: authError } = await supabase.functions.invoke('manage-patient-auth', {
+              body: {
+                action: 'create',
+                cpf: cpfClean,
+                password: form.password,
+                patientData: payload // Passamos os dados para garantir o vínculo no upsert
+              }
+            });
+            if (authError || data?.error) throw new Error(authError?.message || data?.error || 'Erro ao criar login para paciente existente');
+          } else {
+            // Se já tem user_id, apenas atualizamos a senha
+            const { data, error: authError } = await supabase.functions.invoke('manage-patient-auth', {
+              body: {
+                action: 'update',
+                userId: form.user_id,
+                password: form.password
+              }
+            });
+            if (authError || data?.error) throw new Error(authError?.message || data?.error || 'Erro ao atualizar senha');
+          }
         }
 
         showNotification('success', 'Paciente atualizado com sucesso.');
