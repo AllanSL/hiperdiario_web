@@ -145,7 +145,13 @@ export default function ProfissionalPacientesDia() {
                                                             </div>
                                                             <div className="flex items-center">
                                                                 <Home className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                                                                Unidade: <strong className="ml-1 text-gray-700">{apt.cnes_establishments?.name ? CnesService.formatCnesDisplayName(apt.cnes_establishments.name) : (apt.cnes_id || 'Não informada')}</strong>
+                                                                Unidade: <strong className="ml-1 text-gray-700">
+                                                                    {(() => {
+                                                                        const establishments = apt.cnes_establishments;
+                                                                        const name = Array.isArray(establishments) ? establishments[0]?.name : establishments?.name;
+                                                                        return name ? CnesService.formatCnesDisplayName(name) : (apt.cnes_id || 'Não informada');
+                                                                    })()}
+                                                                </strong>
                                                             </div>
                                                         </div>
                                                         {apt.notes && (

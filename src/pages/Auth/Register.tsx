@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import type { CnesEstabelecimento, CnesProfissional } from '../../lib/cnesService';
 import { CnesService } from '../../lib/cnesService';
 import { UserPlus, Search } from 'lucide-react';
+import { useNotification } from '../../contexts/NotificationContext';
 import ufsData from '../../lib/municipios.json';
 import { CustomSelect } from '../../components/CustomSelect';
 
@@ -12,7 +13,7 @@ export default function Register() {
     const [cpfError, setCpfError] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const { showNotification } = useNotification();
 
     // CNES Selection State
     const [uf, setUf] = useState<number>(0); // IBGE UF code
@@ -38,9 +39,9 @@ export default function Register() {
     const formatCPF = (v: string) => {
         const d = onlyDigits(v).slice(0, 11);
         if (d.length <= 3) return d;
-        if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
-        if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
-        return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9,11)}`;
+        if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+        if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
     };
 
     const isValidCPF = (v: string) => {
@@ -91,7 +92,7 @@ export default function Register() {
             const data = await CnesService.buscarEstabelecimentos(uf, municipio);
             setEstabelecimentos(data);
         } catch (e) {
-            setError('Erro ao buscar UBS');
+            showNotification('error', 'Erro ao buscar UBS');
         }
         setLoading(false);
     };
@@ -118,13 +119,13 @@ export default function Register() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedProfissional || !selectedEstabelecimento) {
-            setError('Selecione seu perfil na lista de profissionais do estabelecimento.');
+            showNotification('error', 'Selecione seu perfil na lista de profissionais do estabelecimento.');
             return;
         }
 
         // Validar CPF antes de prosseguir
         if (!validateCpf()) {
-            setError('CPF inválido ou incompleto.');
+            showNotification('error', 'CPF inválido ou incompleto.');
             return;
         }
 
@@ -184,9 +185,9 @@ export default function Register() {
             }
         } catch (err: any) {
             if (err.message === 'User already registered') {
-                setError('Este CPF já possui uma conta cadastrada.');
+                showNotification('error', 'Este CPF já possui uma conta cadastrada.');
             } else {
-                setError(err.message || 'Erro ao registrar profissional.');
+                showNotification('error', err.message || 'Erro ao registrar profissional.');
             }
         }
         setLoading(false);
@@ -205,7 +206,7 @@ export default function Register() {
                 </div>
 
                 <form className="mt-8 space-y-6" onSubmit={handleRegister}>
-                    {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+
 
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -298,7 +299,7 @@ export default function Register() {
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">CPF</label>
-                                        
+
                                         <input
                                             type="text"
                                             required

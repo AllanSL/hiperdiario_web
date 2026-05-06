@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { LogIn } from 'lucide-react';
 
 export default function Login() {
     const [cpf, setCpf] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const { showNotification } = useNotification();
 
     const { session, profile } = useAuth();
     const navigate = useNavigate();
@@ -24,7 +25,6 @@ export default function Login() {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
 
         // Assuming CPF format is numbers only and matches a custom email or identity in Supabase 
         // This usually implies you either authenticate with a custom function or CPF@hiperdiario.app pattern
@@ -37,9 +37,9 @@ export default function Login() {
 
         if (error) {
             if (error.message === 'Invalid login credentials') {
-                setError('CPF ou senha incorretos. Verifique seus dados.');
+                showNotification('error', 'CPF ou senha incorretos. Verifique seus dados.');
             } else {
-                setError(error.message);
+                showNotification('error', error.message);
             }
         }
         setLoading(false);
@@ -57,7 +57,6 @@ export default function Login() {
                     </p>
                 </div>
                 <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-                    {error && <div className="text-red-500 text-sm text-center">{error}</div>}
                     <div className="rounded-md shadow-sm -space-y-px">
                         <div>
                             <input

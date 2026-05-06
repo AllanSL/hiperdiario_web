@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService, type CnesHorario } from '../../lib/cnesService';
 import { ArrowLeft, Users, Clock3, ChevronDown, UserCheck, CheckCircle, XCircle, Info, X } from 'lucide-react';
@@ -70,13 +71,13 @@ export default function RecepcionistaResumoUBS() {
   const [isProfessionalDropdownOpen, setIsProfessionalDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [horariosLoading, setHorariosLoading] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const { showNotification } = useNotification();
   const professionalDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchResumo = async () => {
       if (!profile?.cnes) {
-        setNotification({ type: 'error', message: 'Unidade não está vinculada ao perfil.' });
+        showNotification('error', 'Unidade não está vinculada ao perfil.');
         setLoading(false);
         return;
       }
@@ -123,7 +124,7 @@ export default function RecepcionistaResumoUBS() {
         setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
       } catch (err: any) {
         console.error('Erro ao carregar resumo da UBS:', err);
-        setNotification({ type: 'error', message: err.message || 'Erro ao carregar dados da UBS.' });
+        showNotification('error', err.message || 'Erro ao carregar dados da UBS.');
       } finally {
         setLoading(false);
       }
@@ -140,16 +141,12 @@ export default function RecepcionistaResumoUBS() {
       .then((data) => setHorariosUbs(data))
       .catch((err) => {
         console.error('Erro ao carregar horários da UBS:', err);
-        setNotification({ type: 'error', message: 'Não foi possível carregar horários CNES.' });
+        showNotification('error', 'Não foi possível carregar horários CNES.');
       })
       .finally(() => setHorariosLoading(false));
   }, [profile?.ibge, profile?.cnes]);
 
-  useEffect(() => {
-    if (!notification) return;
-    const timeout = window.setTimeout(() => setNotification(null), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [notification]);
+
 
   const fetchResumo = async () => {
     if (!profile?.cnes) return;
@@ -190,10 +187,10 @@ export default function RecepcionistaResumoUBS() {
         .eq('id', aptId);
 
       if (error) throw error;
-      setNotification({ type: 'success', message: 'Check-in realizado com sucesso!' });
+      showNotification('success', 'Check-in realizado com sucesso!');
       fetchResumo();
     } catch (err: any) {
-      setNotification({ type: 'error', message: 'Erro ao realizar check-in: ' + err.message });
+      showNotification('error', 'Erro ao realizar check-in: ' + err.message);
     }
   };
 
@@ -244,30 +241,7 @@ export default function RecepcionistaResumoUBS() {
       </nav>
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {notification && (
-          <div className="fixed top-24 right-6 z-50 animate-in slide-in-from-right-8 duration-300">
-            <div className={`rounded-2xl border-2 px-6 py-4 shadow-2xl flex items-center gap-3 min-w-[300px] ${
-              notification.type === 'success' ? 'bg-green-600 border-green-500 text-white' : 
-              notification.type === 'error' ? 'bg-red-600 border-red-500 text-white' : 
-              'bg-blue-600 border-blue-500 text-white'
-            }`}>
-              {notification.type === 'success' && <CheckCircle size={24} />}
-              {notification.type === 'error' && <XCircle size={24} />}
-              {notification.type === 'info' && <Info size={24} />}
-              
-              <div className="flex-1">
-                <p className="font-bold text-sm leading-tight">{notification.message}</p>
-              </div>
 
-              <button 
-                onClick={() => setNotification(null)}
-                className="p-1 hover:bg-white/20 rounded-lg transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          </div>
-        )}
 
         <section className="grid gap-4 mb-6 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-blue-50 p-4">

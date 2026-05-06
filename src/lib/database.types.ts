@@ -37,10 +37,13 @@ export interface BlockedTime {
   id: string;
   date_time: string;
   cnes_id?: string;
-  specialty?: string;
-  professional_name?: string;
-  shift?: ShiftType;
+  professional_cns?: string;
+  shift?: ShiftType | 'all';
   reason?: string;
+  professionals?: {
+    nome: string;
+    especialidade: string;
+  };
 }
 
 export interface VitalSigns {

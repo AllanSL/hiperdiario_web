@@ -1,8 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Search, X, Pill, AlertCircle, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+function formatCpf(cpf?: string | number | null) {
+  if (cpf === undefined || cpf === null) return '';
+  const s = String(cpf).replace(/\D/g, '');
+  if (!s) return '';
+  if (s.length <= 3) return s;
+  if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
+  if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+  return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
 
 type Patient = {
   id: string;
@@ -45,7 +56,7 @@ export default function ProfissionalPacientes() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [medicinesLoading, setMedicinesLoading] = useState<Set<string>>(new Set());
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { showNotification } = useNotification();
   const [expandedPatient, setExpandedPatient] = useState<string | null>(null);
   const [editingDiseases, setEditingDiseases] = useState<string | null>(null);
   const [selectedDiseases, setSelectedDiseases] = useState<string[]>([]);
@@ -60,11 +71,7 @@ export default function ProfissionalPacientes() {
     fetchPatients();
   }, [profile?.user_id]);
 
-  useEffect(() => {
-    if (!notification) return;
-    const timeout = window.setTimeout(() => setNotification(null), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [notification]);
+
 
   const fetchPatients = async () => {
     try {
@@ -86,7 +93,7 @@ export default function ProfissionalPacientes() {
       setPatients((data || []) as Patient[]);
     } catch (err) {
       console.error('Erro ao buscar pacientes:', err);
-      setNotification({ type: 'error', message: 'Erro ao buscar pacientes.' });
+      showNotification('error', 'Erro ao buscar pacientes.');
     } finally {
       setLoading(false);
     }
@@ -103,7 +110,7 @@ export default function ProfissionalPacientes() {
   const fetchPatientMedicines = async (patientId: string) => {
     try {
       setMedicinesLoading(prev => new Set(prev).add(patientId));
-      
+
       // Primeiro, busca o remote_id do paciente (UUID)
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
@@ -172,7 +179,7 @@ export default function ProfissionalPacientes() {
       }));
     } catch (err) {
       console.error('Erro ao buscar medicamentos:', err);
-      setNotification({ type: 'error', message: 'Erro ao buscar medicamentos do paciente.' });
+      showNotification('error', 'Erro ao buscar medicamentos do paciente.');
     } finally {
       setMedicinesLoading(prev => {
         const newSet = new Set(prev);
@@ -197,7 +204,7 @@ export default function ProfissionalPacientes() {
     setEditingDiseases(patient.id);
     // Garante que as doenças sejam um array válido e normalizado
     let patientDiseases: string[] = [];
-    
+
     if (Array.isArray(patient.diseases)) {
       patientDiseases = patient.diseases
         .filter(d => d && typeof d === 'string')
@@ -205,7 +212,7 @@ export default function ProfissionalPacientes() {
     } else if (typeof patient.diseases === 'string') {
       patientDiseases = [patient.diseases.trim()];
     }
-    
+
     setSelectedDiseases(patientDiseases);
   };
 
@@ -231,19 +238,19 @@ export default function ProfissionalPacientes() {
         .eq('id', patientId);
 
       if (error) throw error;
-      setNotification({ type: 'success', message: 'Condições/Doenças atualizadas com sucesso.' });
-      
+      showNotification('success', 'Condições/Doenças atualizadas com sucesso.');
+
       // Atualiza a lista local
       setPatients(prev =>
         prev.map(p =>
           p.id === patientId ? { ...p, diseases: selectedDiseases } : p
         )
       );
-      
+
       cancelEditDiseases();
     } catch (err: any) {
       console.error('Erro ao salvar doenças:', err);
-      setNotification({ type: 'error', message: err.message || 'Erro ao salvar condições/doenças.' });
+      showNotification('error', err.message || 'Erro ao salvar condições/doenças.');
     } finally {
       setSaving(false);
     }
@@ -267,7 +274,7 @@ export default function ProfissionalPacientes() {
   const formatSearchInput = (value: string) => {
     // Remove caracteres não numéricos e não alfabéticos
     let cleaned = value.replace(/[^\d\p{L}\s]/gu, '');
-    
+
     // Se for número (CPF), aplica máscara
     if (/^\d+$/.test(value.replace(/\D/g, ''))) {
       const numbers = value.replace(/\D/g, '').slice(0, 11);
@@ -277,7 +284,7 @@ export default function ProfissionalPacientes() {
       if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
       return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9)}`;
     }
-    
+
     return cleaned;
   };
 
@@ -296,11 +303,7 @@ export default function ProfissionalPacientes() {
       </nav>
 
       <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
-        {notification && (
-          <div className={`mb-6 rounded-lg border px-4 py-3 text-sm shadow ${notification.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
-            {notification.message}
-          </div>
-        )}
+
 
         <section className="bg-white shadow rounded-lg p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -341,7 +344,7 @@ export default function ProfissionalPacientes() {
                   >
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-800">{patient.name}</h3>
-                      <p className="text-xs text-gray-500">CPF: {patient.cpf}</p>
+                      <p className="text-xs text-gray-500">CPF: {formatCpf(patient.cpf)}</p>
                       {patient.diseases && patient.diseases.length > 0 && (
                         <p className="text-xs text-indigo-600 mt-1">
                           {Array.isArray(patient.diseases) ? patient.diseases.join(', ') : patient.diseases}
@@ -356,7 +359,7 @@ export default function ProfissionalPacientes() {
                       {/* Seção de Editar Doenças */}
                       <div>
                         <h4 className="font-semibold text-gray-800 mb-4">Condições / Doenças</h4>
-                        
+
                         {editingDiseases === patient.id ? (
                           <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">

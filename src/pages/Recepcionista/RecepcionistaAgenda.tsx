@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Plus, Trash2, Ban, Search, Edit, ChevronLeft, ChevronRight, Calendar, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -38,10 +39,13 @@ type BlockedTime = {
   id: string;
   date_time: string;
   location?: string;
-  specialty?: string;
-  professional_name?: string;
   professional_cns?: string;
   reason?: string;
+  shift?: string;
+  professionals?: {
+    nome: string;
+    especialidade: string;
+  };
 };
 
 const formatCPF = (cpf: string) => {
@@ -75,7 +79,7 @@ export default function RecepcionistaAgenda() {
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date());
-  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const { showNotification } = useNotification();
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
     title: string;
@@ -111,12 +115,7 @@ export default function RecepcionistaAgenda() {
   const [blockReason, setBlockReason] = useState('Bloqueio de agenda');
 
 
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
+
 
   const fetchData = useCallback(async () => {
     try {
@@ -142,7 +141,7 @@ export default function RecepcionistaAgenda() {
 
       const blockResult = await supabase
         .from('blocked_times')
-        .select('*')
+        .select('*, professionals(nome, especialidade)')
         .eq('cnes_id', profile?.cnes)
         .gte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString())
         .lte('date_time', new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59).toISOString())
@@ -193,7 +192,7 @@ export default function RecepcionistaAgenda() {
       setProfessionals(mergedProfs);
     } catch (err: any) {
       console.error('Erro ao buscar dados:', err);
-      setNotification({ type: 'error', message: err.message || 'Erro ao carregar dados da agenda.' });
+      showNotification('error', err.message || 'Erro ao carregar dados da agenda.');
     } finally {
       setLoading(false);
     }
@@ -206,11 +205,7 @@ export default function RecepcionistaAgenda() {
     }
   }, [profile, currentMonth, fetchData]);
 
-  useEffect(() => {
-    if (!notification) return;
-    const timeout = window.setTimeout(() => setNotification(null), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [notification]);
+
 
   useEffect(() => {
     const fetchUnitInfo = async () => {
@@ -349,21 +344,21 @@ export default function RecepcionistaAgenda() {
   const handleSearchPatient = async () => {
     const cpfClean = patientSearch.replace(/\D/g, '');
     if (!cpfClean || cpfClean.length < 8) {
-      setNotification({ type: 'error', message: 'Informe um CPF válido para buscar o paciente.' });
+      showNotification('error', 'Informe um CPF válido para buscar o paciente.');
       return;
     }
     setPatientLoading(true);
     try {
       const { data, error } = await supabase.from('patients').select('id, name, cpf').eq('cpf', cpfClean).single();
       if (error || !data) {
-        setNotification({ type: 'error', message: 'Paciente não encontrado.' });
+        showNotification('error', 'Paciente não encontrado.');
         setSelectedPatient(null);
         return;
       }
       setSelectedPatient(data as Patient);
     } catch (err) {
       console.error('Erro ao buscar paciente:', err);
-      setNotification({ type: 'error', message: 'Erro ao buscar paciente.' });
+      showNotification('error', 'Erro ao buscar paciente.');
     } finally {
       setPatientLoading(false);
     }
@@ -372,11 +367,11 @@ export default function RecepcionistaAgenda() {
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) {
-      setNotification({ type: 'error', message: 'Selecione um paciente válido antes de agendar.' });
+      showNotification('error', 'Selecione um paciente válido antes de agendar.');
       return;
     }
     if (!selectedProfessionalCns) {
-      setNotification({ type: 'error', message: 'Selecione um profissional no filtro do calendário.' });
+      showNotification('error', 'Selecione um profissional no filtro do calendário.');
       return;
     }
     const professional = selectedProfessional;
@@ -396,10 +391,7 @@ export default function RecepcionistaAgenda() {
         );
 
         if (availability.isFull) {
-          setNotification({ 
-            type: 'error', 
-            message: `Capacidade máxima atingida para o turno da ${appointmentForm.shift === 'morning' ? 'manhã' : 'tarde'} (${availability.booked}/5).` 
-          });
+          showNotification('error', `Capacidade máxima atingida para o turno da ${appointmentForm.shift === 'morning' ? 'manhã' : 'tarde'} (${availability.booked}/5).`);
           setCreatingAppointment(false);
           return;
         }
@@ -419,19 +411,19 @@ export default function RecepcionistaAgenda() {
       if (editingAppointment) {
         const { error } = await supabase.from('appointments').update(payload).eq('id', editingAppointment.id);
         if (error) throw error;
-        setNotification({ type: 'success', message: 'Consulta atualizada com sucesso.' });
+        showNotification('success', 'Consulta atualizada com sucesso.');
         setEditingAppointment(null);
       } else {
         const { error } = await supabase.from('appointments').insert([payload]);
         if (error) throw error;
-        setNotification({ type: 'success', message: 'Consulta agendada com sucesso.' });
+        showNotification('success', 'Consulta agendada com sucesso.');
       }
 
       setPatientSearch('');
       fetchData();
     } catch (err: any) {
       console.error('Erro ao agendar consulta:', err);
-      setNotification({ type: 'error', message: err.message || 'Erro ao salvar consulta.' });
+      showNotification('error', err.message || 'Erro ao salvar consulta.');
     } finally {
       setCreatingAppointment(false);
     }
@@ -447,11 +439,11 @@ export default function RecepcionistaAgenda() {
         try {
           const { error } = await supabase.from('appointments').delete().eq('id', id);
           if (error) throw error;
-          setNotification({ type: 'success', message: 'Consulta excluída.' });
+          showNotification('success', 'Consulta excluída.');
           fetchData();
         } catch (err: any) {
           console.error('Erro ao excluir consulta:', err);
-          setNotification({ type: 'error', message: err.message || 'Erro ao excluir consulta.' });
+          showNotification('error', err.message || 'Erro ao excluir consulta.');
         }
         setConfirmModal(prev => ({ ...prev, show: false }));
       }
@@ -465,50 +457,42 @@ export default function RecepcionistaAgenda() {
         .update({ status: 'checked_in', checked_in_at: new Date().toISOString() })
         .eq('id', aptId);
       if (error) throw error;
-      setNotification({ type: 'success', message: 'Check-in realizado! Paciente adicionado à fila.' });
+      showNotification('success', 'Check-in realizado! Paciente adicionado à fila.');
       fetchData();
     } catch (err: any) {
-      setNotification({ type: 'error', message: 'Erro ao fazer check-in: ' + err.message });
+      showNotification('error', 'Erro ao fazer check-in: ' + err.message);
     }
   };
 
   const handleToggleBlock = async () => {
     const isUnitBlock = !selectedProfessionalCns;
     const currentBlocks = isUnitBlock
-      ? selectedDateBlocks.filter(blk => !blk.professional_cns && blk.professional_name === 'TODOS')
-      : selectedDateBlocks.filter(blk => {
-        if (blk.professional_cns) return blk.professional_cns === selectedProfessionalCns;
-        return blk.professional_name === selectedProfessional?.nome;
-      });
+      ? selectedDateBlocks.filter(blk => !blk.professional_cns)
+      : selectedDateBlocks.filter(blk => blk.professional_cns === selectedProfessionalCns);
 
     const alreadyBlocked = currentBlocks.length > 0;
 
     const hasAppointments = isUnitBlock
       ? selectedDateAppointments.length > 0
-      : selectedDateAppointments.some((apt) => {
-        if (apt.professional_cns) return apt.professional_cns === selectedProfessionalCns;
-        return apt.professional_name === selectedProfessional?.nome;
-      });
+      : selectedDateAppointments.some((apt) => apt.professional_cns === selectedProfessionalCns);
 
     const confirmBlock = async () => {
       try {
         setBlockingDate(true);
         const block = {
           date_time: new Date(`${selectedDate.toISOString().split('T')[0]}T00:00:00`).toISOString(),
-          professional_name: isUnitBlock ? 'TODOS' : selectedProfessional?.nome || '',
           professional_cns: isUnitBlock ? null : selectedProfessional?.cns || null,
-          specialty: isUnitBlock ? 'TODOS' : selectedProfessional?.especialidade || '',
           location: profile?.cnes || '',
           reason: blockReason || (isUnitBlock ? 'Bloqueio de unidade' : `Bloqueio de agenda`),
         };
         const { error } = await supabase.from('blocked_times').insert([block]);
         if (error) throw error;
-        setNotification({ type: 'success', message: `Data bloqueada para ${isUnitBlock ? 'todos os profissionais da unidade' : selectedProfessional?.nome}.` });
+        showNotification('success', `Data bloqueada para ${isUnitBlock ? 'todos os profissionais da unidade' : selectedProfessional?.nome}.`);
         setBlockReason('');
         fetchData();
       } catch (err: any) {
         console.error('Erro ao bloquear dia:', err);
-        setNotification({ type: 'error', message: err.message || 'Erro ao bloquear dia.' });
+        showNotification('error', err.message || 'Erro ao bloquear dia.');
       } finally {
         setBlockingDate(false);
         setConfirmModal(prev => ({ ...prev, show: false }));
@@ -525,11 +509,11 @@ export default function RecepcionistaAgenda() {
             const ids = currentBlocks.map((blk) => blk.id);
             const { error } = await supabase.from('blocked_times').delete().in('id', ids);
             if (error) throw error;
-            setNotification({ type: 'success', message: 'Bloqueio liberado com sucesso.' });
+            showNotification('success', 'Bloqueio liberado com sucesso.');
             fetchData();
           } catch (err: any) {
             console.error('Erro ao desbloquear dia:', err);
-            setNotification({ type: 'error', message: err.message || 'Erro ao desbloquear dia.' });
+            showNotification('error', err.message || 'Erro ao desbloquear dia.');
           }
           setConfirmModal(prev => ({ ...prev, show: false }));
         }
@@ -591,15 +575,14 @@ export default function RecepcionistaAgenda() {
             {(() => {
               const isUnitBlock = !selectedProfessionalCns;
               const currentBlocks = selectedDateBlocks.filter(blk => {
-                if (isUnitBlock) return blk.professional_name === 'TODOS';
-                if (blk.professional_cns) return blk.professional_cns === selectedProfessionalCns;
-                return blk.professional_name === selectedProfessional?.nome;
+                if (isUnitBlock) return !blk.professional_cns;
+                return blk.professional_cns === selectedProfessionalCns;
               });
               const alreadyBlocked = currentBlocks.length > 0;
 
               const appointmentsToCheck = isUnitBlock
                 ? selectedDateAppointments
-                : selectedDateAppointments.filter(a => a.professional_cns === selectedProfessionalCns || a.professional_name === selectedProfessional?.nome);
+                : selectedDateAppointments.filter(a => a.professional_cns === selectedProfessionalCns);
 
               return (
                 <section className="bg-white shadow rounded-lg p-6 mb-6">
@@ -647,7 +630,7 @@ export default function RecepcionistaAgenda() {
                         <Plus className="rotate-45" size={16} />
                       </div>
                       <span>
-                        Atenção: Existem <strong>{appointmentsToCheck.length} consultas</strong> já agendadas para este filtro.
+                        Atenção: {appointmentsToCheck.length === 1 ? 'Existe' : 'Existem'} <strong>{appointmentsToCheck.length} {appointmentsToCheck.length === 1 ? 'consulta' : 'consultas'}</strong> já agendadas para este filtro.
                         O bloqueio impedirá novas marcações, mas as existentes permanecerão visíveis.
                       </span>
                     </div>
@@ -934,8 +917,8 @@ export default function RecepcionistaAgenda() {
                         <ul className="space-y-3">
                           {selectedDateBlocks.map((blk) => (
                             <li key={blk.id} className="rounded-lg border border-red-200 p-4 bg-red-50">
-                              <div className="font-semibold text-red-800">{blk.professional_name === 'TODOS' ? 'Bloqueio de Unidade' : blk.professional_name}</div>
-                              <div className="text-sm text-red-600">{blk.specialty || 'Todos'} • {blk.location}</div>
+                              <div className="font-semibold text-red-800">{blk.professionals?.nome || 'Bloqueio de Unidade'}</div>
+                              <div className="text-sm text-red-600">{blk.professionals?.especialidade || 'Todos'} • {blk.location}</div>
                               {blk.reason && <p className="mt-2 text-sm text-red-700 font-medium">Motivo: {blk.reason}</p>}
                             </li>
                           ))}

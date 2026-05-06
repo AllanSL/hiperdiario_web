@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService } from '../../lib/cnesService';
-import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ProfissionalAgenda() {
@@ -12,7 +13,7 @@ export default function ProfissionalAgenda() {
     const [blockedTimes, setBlockedTimes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [ubsName, setUbsName] = useState('');
-    const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+    const { showNotification } = useNotification();
 
     const formatCPF = (v: string) => {
         const d = v.replace(/\D/g, '').slice(0, 11);
@@ -30,25 +31,15 @@ export default function ProfissionalAgenda() {
     const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
-    useEffect(() => {
-        if (!notification) return;
-
-        const timeout = window.setTimeout(() => {
-            setNotification(null);
-        }, 5000);
-
-        return () => window.clearTimeout(timeout);
-    }, [notification]);
-
     // Modal state
     const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
-    const [isUnblockModalOpen, setIsUnblockModalOpen] = useState(false);
     const [blockForm, setBlockForm] = useState({
         date: '',
         location: '',
         specialty: '',
         professionalName: profile?.nome || '',
-        reason: ''
+        reason: '',
+        shift: 'all' as 'morning' | 'afternoon' | 'all'
     });
     const [isSubmittingBlock, setIsSubmittingBlock] = useState(false);
     const [isSubmittingUnblock, setIsSubmittingUnblock] = useState(false);
@@ -56,9 +47,6 @@ export default function ProfissionalAgenda() {
     useEffect(() => {
         if (profile?.user_id) {
             fetchAgendaParaOMes(currentMonth);
-            if (profile.ibge && profile.cnes) {
-                // Fetching removed as it was not being used
-            }
         }
     }, [profile, currentMonth]);
 
@@ -173,8 +161,6 @@ export default function ProfissionalAgenda() {
         });
     }, [blockedTimes, selectedDate]);
 
-
-
     const selectedDateAppointments = useMemo(() => {
         return appointments.filter(apt => {
             const aptDate = new Date(apt.date_time);
@@ -201,7 +187,7 @@ export default function ProfissionalAgenda() {
         e.preventDefault();
 
         if (!blockForm.date) {
-            setNotification({ type: 'error', message: 'Por favor, selecione uma data para bloqueio.' });
+            showNotification('error', 'Por favor, selecione uma data para bloqueio.');
             return;
         }
 
@@ -212,49 +198,56 @@ export default function ProfissionalAgenda() {
             return blkDate.getDate() === targetDate.getDate() &&
                 blkDate.getMonth() === targetDate.getMonth() &&
                 blkDate.getFullYear() === targetDate.getFullYear() &&
-                blk.professional_name === blockForm.professionalName &&
-                blk.location === (blockForm.location || 'Não informado') &&
-                blk.specialty === (blockForm.specialty || '');
+                blk.professional_cns === profile?.cns &&
+                blk.cnes_id === (blockForm.location || '') &&
+                (blk.shift === blockForm.shift || blk.shift === 'all' || blockForm.shift === 'all');
         });
 
         if (blockExists) {
-            setNotification({ type: 'error', message: 'Já existe um bloqueio para este dia e esta especialidade/profissional. Libere o bloqueio existente antes de criar outro.' });
+            const conflictMsg = blockForm.shift === 'all'
+                ? 'Já existe um bloqueio (parcial ou total) para este dia.'
+                : 'Já existe um bloqueio total ou para este mesmo turno neste dia.';
+            showNotification('error', conflictMsg);
             return;
         }
 
         try {
+            const dateObj = new Date(`${blockForm.date}T00:00:00`);
+            if (isNaN(dateObj.getTime())) {
+                showNotification('error', 'Data inválida.');
+                return;
+            }
+            if (dateObj.getFullYear() > 2100) {
+                showNotification('error', 'O ano não pode ser superior a 2100.');
+                return;
+            }
+
             setIsSubmittingBlock(true);
             const block = {
-                location: blockForm.location || 'Não informado',
-                date_time: new Date(`${blockForm.date}T00:00:00`).toISOString(),
-                specialty: blockForm.specialty || '',
-                professional_name: blockForm.professionalName,
+                cnes_id: blockForm.location || null,
+                date_time: dateObj.toISOString(),
                 professional_cns: profile?.cns,
-                reason: blockForm.reason || 'Dia Bloqueado'
+                reason: blockForm.reason || (blockForm.shift === 'all' ? 'Dia Bloqueado' : blockForm.shift === 'morning' ? 'Manhã Bloqueada' : 'Tarde Bloqueada'),
+                shift: blockForm.shift
             };
 
             const { error } = await supabase.from('blocked_times').insert([block]);
             if (error) throw error;
 
-            setNotification({ type: 'success', message: 'Dia bloqueado com sucesso!' });
+            showNotification('success', 'Dia bloqueado com sucesso!');
             setIsBlockModalOpen(false);
             fetchAgendaParaOMes(currentMonth);
 
         } catch (err: any) {
             console.error(err);
-            setNotification({ type: 'error', message: 'Erro ao bloquear o dia: ' + err.message });
+            showNotification('error', 'Erro ao bloquear o dia: ' + err.message);
         } finally {
             setIsSubmittingBlock(false);
         }
     };
 
     const handleToggleBlock = async () => {
-        if (selectedDateBlocks.length === 0) {
-            handleOpenBlockModal();
-            return;
-        }
-
-        setIsUnblockModalOpen(true);
+        handleOpenBlockModal();
     };
 
     const confirmUnblockDay = async () => {
@@ -264,12 +257,25 @@ export default function ProfissionalAgenda() {
             const { error } = await supabase.from('blocked_times').delete().in('id', ids);
             if (error) throw error;
             fetchAgendaParaOMes(currentMonth);
-            setIsUnblockModalOpen(false);
+            if (selectedDateBlocks.length <= ids.length) {
+                setIsBlockModalOpen(false);
+            }
         } catch (err: any) {
             console.error(err);
-            setNotification({ type: 'error', message: 'Erro ao liberar o dia: ' + err.message });
+            showNotification('error', 'Erro ao liberar o dia: ' + err.message);
         } finally {
             setIsSubmittingUnblock(false);
+        }
+    };
+
+    const confirmUnblockOne = async (id: string) => {
+        try {
+            const { error } = await supabase.from('blocked_times').delete().eq('id', id);
+            if (error) throw error;
+            fetchAgendaParaOMes(currentMonth);
+        } catch (err: any) {
+            console.error(err);
+            showNotification('error', 'Erro ao liberar o bloqueio: ' + err.message);
         }
     };
 
@@ -291,7 +297,8 @@ export default function ProfissionalAgenda() {
             location: initialLocation,
             specialty: initialSpecialty,
             professionalName: profile?.nome || prev.professionalName,
-            reason: ''
+            reason: '',
+            shift: 'all'
         }));
         setIsBlockModalOpen(true);
     };
@@ -309,14 +316,6 @@ export default function ProfissionalAgenda() {
             </nav>
 
             <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8 w-full flex-grow">
-                {notification && (
-                    <div className={`mx-auto mb-6 max-w-2xl rounded-lg border px-4 py-3 text-sm shadow ${notification.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : notification.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
-                        <div className="flex items-start justify-between gap-4">
-                            <p className="flex-1">{notification.message}</p>
-                            <button type="button" onClick={() => setNotification(null)} className="text-current opacity-70 hover:opacity-100">✕</button>
-                        </div>
-                    </div>
-                )}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Componente Calendário */}
                     <div className="bg-white p-4 shadow rounded-lg h-fit">
@@ -401,9 +400,9 @@ export default function ProfissionalAgenda() {
                                     <button
                                         onClick={handleToggleBlock}
                                         disabled={isPastSelected}
-                                        className={`flex items-center gap-2 ${selectedDateBlocks.length > 0 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-1.5 rounded shadow transition text-sm ${isPastSelected ? 'invisible' : ''}`}>
+                                        className={`flex items-center gap-2 ${selectedDateBlocks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-1.5 rounded shadow transition text-sm ${isPastSelected ? 'invisible' : ''}`}>
                                         <Ban size={16} />
-                                        <span className="hidden sm:inline">{selectedDateBlocks.length > 0 ? 'Desbloquear dia' : 'Bloquear dia'}</span>
+                                        <span className="hidden sm:inline">{selectedDateBlocks.length > 0 ? 'Gerenciar bloqueios' : 'Bloquear dia'}</span>
                                     </button>
                                 );
                             })()}
@@ -426,7 +425,7 @@ export default function ProfissionalAgenda() {
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center text-sm font-bold text-red-600">
                                                         <Ban className="mr-2 h-5 w-5 text-red-500" />
-                                                        Dia Bloqueado
+                                                        {blk.shift === 'morning' ? 'Manhã Bloqueada' : blk.shift === 'afternoon' ? 'Tarde Bloqueada' : 'Dia Bloqueado'}
                                                     </div>
                                                 </div>
                                                 {blk.reason && blk.reason !== 'Dia Bloqueado' ? (
@@ -457,9 +456,16 @@ export default function ProfissionalAgenda() {
                                                         <Clock className="mr-2 h-4 w-4 text-green-500" />
                                                         Turno: <span className="ml-1 text-indigo-600 font-bold">{getShiftLabel(apt.shift)}</span>
                                                     </div>
-                                                    <div className="flex items-center text-xs text-gray-500">
-                                                        Unidade: <strong className="ml-1 text-gray-700">{apt.cnes_establishments?.name ? CnesService.formatCnesDisplayName(apt.cnes_establishments.name) : (apt.cnes_id || 'Não informada')}</strong>
-                                                    </div>
+                                                    {/* Profissional não necessita ver unidade  pois o mesmo é registrado apenas em uma unidade*/}
+                                                    {/* <div className="flex items-center text-xs text-gray-500">
+                                                        Unidade: <strong className="ml-1 text-gray-700">
+                                                            {(() => {
+                                                                const establishments = apt.cnes_establishments;
+                                                                const name = Array.isArray(establishments) ? establishments[0]?.name : establishments?.name;
+                                                                return name ? CnesService.formatCnesDisplayName(name) : (apt.cnes_id || 'Não informada');
+                                                            })()}
+                                                        </strong>
+                                                    </div> */}
                                                     {apt.notes && <div className="italic break-words text-xs text-gray-500 border-l-2 border-gray-200 pl-2 mt-1">Obs: {apt.notes}</div>}
                                                 </div>
                                             </li>
@@ -477,113 +483,142 @@ export default function ProfissionalAgenda() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg shadow-xl max-w-lg w-full overflow-hidden">
                         <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                            <h2 className="text-xl font-bold text-gray-800">Bloquear dia</h2>
+                            <h2 className="text-xl font-bold text-gray-800">Gerenciar Bloqueios</h2>
                             <button onClick={() => setIsBlockModalOpen(false)} className="text-gray-500 hover:text-gray-700">
                                 <X size={24} />
                             </button>
                         </div>
-                        <form onSubmit={handleCreateBlock} className="p-6 space-y-4">
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                                    <div className="flex-1">
-                                        <label className="block text-sm font-medium text-gray-700">Data *</label>
+                        <div className="max-h-[80vh] overflow-y-auto">
+                            {selectedDateBlocks.length > 0 && (
+                                <div className="pt-2 p-6 bg-gray-50 border-b border-gray-200">
+                                    <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Bloqueios Ativos</h3>
+                                    <div className="space-y-2">
+                                        {selectedDateBlocks.map(blk => (
+                                            <div key={blk.id} className="flex items-center justify-between p-3 bg-white rounded-md border border-red-100 shadow-sm">
+                                                <div className="text-sm">
+                                                    <span className="font-bold text-red-600">
+                                                        {blk.shift === 'morning' ? 'Manhã' : blk.shift === 'afternoon' ? 'Tarde' : 'Dia Todo'}
+                                                    </span>
+                                                    {blk.reason && <span className="block text-xs text-gray-500 italic">Motivo: {blk.reason}</span>}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => confirmUnblockOne(blk.id)}
+                                                    className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full transition"
+                                                    title="Remover este bloqueio"
+                                                >
+                                                    <X size={18} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-2 p-6">
+                                <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">
+                                    {selectedDateBlocks.length > 0 ? 'Adicionar Novo Bloqueio' : 'Criar Bloqueio'}
+                                </h3>
+                                <form onSubmit={handleCreateBlock} className="space-y-4">
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-gray-700">Data *</label>
+                                                <input
+                                                    type="date"
+                                                    min={new Date().toISOString().split('T')[0]}
+                                                    max="2099-12-31"
+                                                    required
+                                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
+                                                    value={blockForm.date}
+                                                    onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-gray-700">Turno *</label>
+                                                <select
+                                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
+                                                    value={blockForm.shift}
+                                                    onChange={e => setBlockForm({ ...blockForm, shift: e.target.value as any })}
+                                                >
+                                                    <option value="all">Dia Inteiro</option>
+                                                    <option value="morning">Manhã</option>
+                                                    <option value="afternoon">Tarde</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {(() => {
+                                        const count = selectedDateAppointments.filter(apt =>
+                                            blockForm.shift === 'all' || apt.shift === blockForm.shift
+                                        ).length;
+
+                                        if (count > 0) {
+                                            return (
+                                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm flex items-start gap-2">
+                                                    <Activity size={18} className="shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <strong>Atenção:</strong> Existem {count} paciente(s) agendado(s) para este período. O bloqueio não cancela automaticamente os agendamentos existentes.
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700">Nome do Profissional *</label>
+                                            <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
+                                                {blockForm.professionalName || 'Não informado'}
+                                            </div>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700">Especialidade</label>
+                                            <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
+                                                {blockForm.specialty || 'Não informado'}
+                                            </div>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700">Unidade</label>
+                                            <input
+                                                type="text"
+                                                disabled
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed"
+                                                value={ubsName ? CnesService.formatCnesDisplayName(ubsName) : (blockForm.location || 'Não informado')}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Motivo do Bloqueio</label>
                                         <input
-                                            type="date"
-                                            min={new Date().toISOString().split('T')[0]}
-                                            required
+                                            type="text"
+                                            placeholder="Ex: Feriado, Atestado..."
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
-                                            value={blockForm.date}
-                                            onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
+                                            value={blockForm.reason}
+                                            onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
                                         />
                                     </div>
-                                </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Nome do Profissional *</label>
-                                    <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
-                                        {blockForm.professionalName || 'Não informado'}
+                                    <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsBlockModalOpen(false)}
+                                            className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmittingBlock}
+                                            className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-md transition disabled:opacity-50"
+                                        >
+                                            {isSubmittingBlock ? 'Bloqueando...' : 'Confirmar Bloqueio'}
+                                        </button>
                                     </div>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Especialidade</label>
-                                    <div className="mt-1 min-h-[44px] w-full rounded-md border border-gray-300 bg-gray-100 p-3 text-gray-700 break-words whitespace-normal">
-                                        {blockForm.specialty || 'Não informado'}
-                                    </div>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Unidade</label>
-                                    <input
-                                        type="text"
-                                        disabled
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-gray-100 text-gray-500 cursor-not-allowed"
-                                        value={blockForm.location || 'Não informado'}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Motivo do Bloqueio</label>
-                                <input
-                                    type="text"
-                                    placeholder="Ex: Feriado, Atestado..."
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border"
-                                    value={blockForm.reason}
-                                    onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsBlockModalOpen(false)}
-                                    className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmittingBlock}
-                                    className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-md transition disabled:opacity-50"
-                                >
-                                    {isSubmittingBlock ? 'Bloqueando...' : 'Confirmar Bloqueio'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {isUnblockModalOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full overflow-hidden">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                            <h2 className="text-xl font-bold text-gray-800">Desbloquear dia</h2>
-                            <button onClick={() => setIsUnblockModalOpen(false)} className="text-gray-500 hover:text-gray-700">
-                                <X size={24} />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <p className="text-sm text-gray-700">
-                                Tem certeza que deseja liberar o bloqueio para {selectedDate.toLocaleDateString('pt-BR')}?
-                            </p>
-                            <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-200">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsUnblockModalOpen(false)}
-                                    className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={confirmUnblockDay}
-                                    disabled={isSubmittingUnblock}
-                                    className="px-4 py-2 text-white bg-yellow-500 hover:bg-yellow-600 rounded-md transition disabled:opacity-50"
-                                >
-                                    {isSubmittingUnblock ? 'Liberando...' : 'Confirmar'}
-                                </button>
+                                </form>
                             </div>
                         </div>
                     </div>

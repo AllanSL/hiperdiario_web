@@ -5,6 +5,7 @@ import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, AlertTriangle, Pill,
 import { useNavigate } from 'react-router-dom';
 import { STATUS_CONFIG } from '../../lib/database.types';
 import type { VitalSigns, ClinicalNote } from '../../lib/database.types';
+import { useNotification } from '../../contexts/NotificationContext';
 
 type Patient = { id: string; name: string; cpf: string; diseases?: string[]; remote_id?: string };
 type Medicine = { id: string; active_principle: string; strength: string; form: string; stock: number; dispensing_unit: string; frequency_label: string };
@@ -35,7 +36,7 @@ export default function ProfissionalAtendimentos() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { showNotification } = useNotification();
 
   // Modal state
   const [selectedApt, setSelectedApt] = useState<Appointment | null>(null);
@@ -51,7 +52,6 @@ export default function ProfissionalAtendimentos() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => { if (profile?.cns) fetchAppointments(); }, [profile]);
-  useEffect(() => { if (!notification) return; const t = setTimeout(() => setNotification(null), 4000); return () => clearTimeout(t); }, [notification]);
 
   const fetchAppointments = async () => {
     try {
@@ -66,7 +66,7 @@ export default function ProfissionalAtendimentos() {
       if (error) throw error;
       setAppointments((data || []) as Appointment[]);
     } catch (err: any) {
-      setNotification({ type: 'error', message: 'Erro ao carregar atendimentos.' });
+      showNotification('error', 'Erro ao carregar atendimentos.');
     } finally { setLoading(false); }
   };
 
@@ -165,7 +165,7 @@ export default function ProfissionalAtendimentos() {
   const handleFinalize = async () => {
     if (!selectedApt) return;
     if (!clinicalContent.trim()) {
-      setNotification({ type: 'error', message: 'O relato clínico é obrigatório para finalizar o atendimento.' });
+      showNotification('error', 'O relato clínico é obrigatório para finalizar o atendimento.');
       return;
     }
     const patient = getPatient(selectedApt);
@@ -187,19 +187,19 @@ export default function ProfissionalAtendimentos() {
       if (error) throw error;
 
       setSelectedApt(null);
-      setNotification({ type: 'success', message: 'Atendimento finalizado com sucesso!' });
+      showNotification('success', 'Atendimento finalizado com sucesso!');
       fetchAppointments();
     } catch (err: any) {
-      setNotification({ type: 'error', message: 'Erro ao finalizar: ' + err.message });
+      showNotification('error', 'Erro ao finalizar: ' + err.message);
     } finally { setSaving(false); }
   };
 
   const handleMarkMissed = async (apt: Appointment) => {
     try {
       await supabase.from('appointments').update({ status: 'missed' }).eq('id', apt.id);
-      setNotification({ type: 'success', message: 'Paciente marcado como ausente.' });
+      showNotification('success', 'Paciente marcado como ausente.');
       fetchAppointments();
-    } catch { setNotification({ type: 'error', message: 'Erro ao atualizar status.' }); }
+    } catch { showNotification('error', 'Erro ao atualizar status.'); }
   };
 
   const addPoint = () => { if (newPoint.trim()) { setAttentionPoints(prev => [...prev, newPoint.trim()]); setNewPoint(''); } };
@@ -284,15 +284,7 @@ export default function ProfissionalAtendimentos() {
       </nav>
 
       <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
-        {notification && (
-          <div className={`mb-6 rounded-2xl border px-6 py-4 text-sm font-bold shadow-lg flex items-center justify-between animate-in slide-in-from-top-4 duration-300 ${notification.type === 'success' ? 'bg-green-600 border-green-500 text-white' : 'bg-red-600 border-red-500 text-white'}`}>
-            <span className="flex items-center gap-2">
-              {notification.type === 'success' ? <CheckCircle size={20} /> : <XCircle size={20} />}
-              {notification.message}
-            </span>
-            <button onClick={() => setNotification(null)} className="ml-3 opacity-80 hover:opacity-100"><X size={20} /></button>
-          </div>
-        )}
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" />

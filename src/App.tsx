@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import Login from './pages/Auth/Login';
 import RecepcionistaDashboard from './pages/Recepcionista/RecepcionistaDashboard';
 import RecepcionistaPacientes from './pages/Recepcionista/RecepcionistaPacientes';
@@ -27,7 +28,8 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 export default function App() {
   return (
     <AuthProvider>
-      <HashRouter>
+      <NotificationProvider>
+        <HashRouter>
         <Routes>
           <Route path='/' element={<Login />} />
           <Route path='/cadastro' element={<Register />} />
@@ -42,6 +44,7 @@ export default function App() {
           <Route path='/profissional/pacientes' element={<ProtectedRoute allowedRoles={['profissional_saude']}><ProfissionalPacientes /></ProtectedRoute>} />
         </Routes>
       </HashRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

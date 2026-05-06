@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Edit, Trash2, Search, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -36,17 +37,13 @@ export default function RecepcionistaPacientes() {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     fetchPatients();
   }, [profile]);
 
-  useEffect(() => {
-    if (!notification) return;
-    const timeout = window.setTimeout(() => setNotification(null), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [notification]);
+
 
   const fetchPatients = async () => {
     try {
@@ -68,7 +65,7 @@ export default function RecepcionistaPacientes() {
       setPatients((data || []) as Patient[]);
     } catch (err) {
       console.error('Erro ao buscar pacientes:', err);
-      setNotification({ type: 'error', message: 'Erro ao buscar pacientes.' });
+      showNotification('error', 'Erro ao buscar pacientes.');
     } finally {
       setLoading(false);
     }
@@ -94,7 +91,7 @@ export default function RecepcionistaPacientes() {
 
     const cpfClean = form.cpf.replace(/\D/g, '');
     if (!form.name.trim() || cpfClean.length !== 11) {
-      setNotification({ type: 'error', message: 'Informe nome e CPF válido para o paciente.' });
+      showNotification('error', 'Informe nome e CPF válido para o paciente.');
       return;
     }
 
@@ -109,18 +106,18 @@ export default function RecepcionistaPacientes() {
           .eq('id', form.id);
 
         if (error) throw error;
-        setNotification({ type: 'success', message: 'Paciente atualizado com sucesso.' });
+        showNotification('success', 'Paciente atualizado com sucesso.');
       } else {
         const { error } = await supabase.from('patients').insert([payload]);
         if (error) throw error;
-        setNotification({ type: 'success', message: 'Paciente cadastrado com sucesso.' });
+        showNotification('success', 'Paciente cadastrado com sucesso.');
       }
 
       resetForm();
       fetchPatients();
     } catch (err: any) {
       console.error('Erro ao salvar paciente:', err);
-      setNotification({ type: 'error', message: err.message || 'Erro ao salvar paciente.' });
+      showNotification('error', err.message || 'Erro ao salvar paciente.');
     } finally {
       setSaving(false);
     }
@@ -144,11 +141,11 @@ export default function RecepcionistaPacientes() {
       setSaving(true);
       const { error } = await supabase.from('patients').delete().eq('id', id);
       if (error) throw error;
-      setNotification({ type: 'success', message: 'Paciente removido.' });
+      showNotification('success', 'Paciente removido.');
       fetchPatients();
     } catch (err: any) {
       console.error('Erro ao remover paciente:', err);
-      setNotification({ type: 'error', message: err.message || 'Erro ao remover paciente.' });
+      showNotification('error', err.message || 'Erro ao remover paciente.');
     } finally {
       setSaving(false);
     }
@@ -172,11 +169,7 @@ export default function RecepcionistaPacientes() {
       </nav>
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {notification && (
-          <div className={`mb-6 rounded-lg border px-4 py-3 text-sm shadow ${notification.type === 'success' ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
-            {notification.message}
-          </div>
-        )}
+
 
         <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-6">
           <section className="bg-white shadow rounded-lg p-6">
