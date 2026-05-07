@@ -105,7 +105,7 @@ export function CustomSelect({
         }
     }, [focusedIndex, open]);
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDown = (e: React.KeyboardEvent<any>) => {
         if (disabled) return;
 
         if (e.key === 'ArrowDown') {

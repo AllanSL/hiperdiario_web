@@ -14,7 +14,7 @@ export class AppointmentService {
     shift: ShiftType,
     dateStr: string,
     professional_cns?: string | null
-  ): Promise<{ booked: number; available: number; isFull: boolean }> {
+  ): Promise<{ booked: number; available: number; isFull: boolean; isBlocked: boolean }> {
     try {
       const startOfDay = new Date(dateStr).toISOString().split('T')[0] + 'T00:00:00Z';
       const endOfDay = new Date(dateStr).toISOString().split('T')[0] + 'T23:59:59Z';
