@@ -13,26 +13,39 @@ interface CustomSelectProps {
     placeholder: string;
     disabled?: boolean;
     searchable?: boolean;
+    forceDirection?: 'up' | 'down';
 }
 
-export function CustomSelect({ value, onChange, options, placeholder, disabled, searchable = true }: CustomSelectProps) {
+export function CustomSelect({
+    value,
+    onChange,
+    options,
+    placeholder,
+    disabled,
+    searchable = true,
+    forceDirection
+}: CustomSelectProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [focusedIndex, setFocusedIndex] = useState(-1);
     const [dropDirection, setDropDirection] = useState<'down' | 'up'>('down');
-    
+
     const wrapperRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
 
     useEffect(() => {
         if (open && wrapperRef.current) {
+            if (forceDirection) {
+                setDropDirection(forceDirection);
+                return;
+            }
             const rect = wrapperRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const hasSpaceBelow = spaceBelow > 300; // 300px threshold for the dropdown list
             setDropDirection(hasSpaceBelow ? 'down' : 'up');
         }
-    }, [open]);
+    }, [open, forceDirection]);
 
     const selectedOption = options.find((o) => o.value === value);
     const selectedLabel = selectedOption?.label || '';
@@ -126,8 +139,26 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled, 
     };
 
     return (
-        <div className="relative" ref={wrapperRef} onBlur={handleBlur} tabIndex={-1}>
-            <div 
+        <div
+            className="relative"
+            ref={wrapperRef}
+            onBlur={handleBlur}
+            tabIndex={disabled ? -1 : 0}
+            onKeyDown={(e) => {
+                if (disabled) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    if (!open) {
+                        e.preventDefault();
+                        setOpen(true);
+                        if (searchable) {
+                            setTimeout(() => inputRef.current?.focus(), 10);
+                        }
+                    }
+                }
+                if (open) handleKeyDown(e);
+            }}
+        >
+            <div
                 className={`flex items-center justify-between w-full rounded-xl border shadow-sm transition-all bg-gray-50 cursor-pointer overflow-hidden
                     ${open ? 'border-green-500 ring-4 ring-green-50' : 'border-gray-200'}
                     ${disabled ? 'opacity-60 cursor-not-allowed bg-gray-100' : 'hover:border-gray-300'}
@@ -168,9 +199,9 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled, 
             </div>
 
             {open && !disabled && (
-                <ul 
-                    ref={listRef} 
-                    className={`absolute z-50 w-full bg-white shadow-2xl max-h-[40vh] rounded-2xl text-base ring-1 ring-black ring-opacity-5 overflow-auto overflow-x-hidden focus:outline-none animate-in fade-in zoom-in duration-200
+                <ul
+                    ref={listRef}
+                    className={`absolute z-50 w-full bg-white shadow-2xl max-h-[220px] rounded-2xl text-base ring-1 ring-black ring-opacity-5 overflow-auto overflow-x-hidden focus:outline-none animate-in fade-in zoom-in duration-200 custom-scrollbar
                         ${dropDirection === 'up' ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'}
                     `}
                 >

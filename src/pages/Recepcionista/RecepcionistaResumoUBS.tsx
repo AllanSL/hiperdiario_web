@@ -37,8 +37,38 @@ type AppointmentSummary = {
 
 
 
-const getStatusLabel = (status?: string) => {
+const getStatusLabel = (status?: string, dateTime?: string, shift?: string) => {
   const normalized = status?.toLowerCase() || '';
+
+  // Lógica para marcar como 'Faltou' se o tempo expirou e ainda está apenas como 'Agendada'
+  if (normalized === 'scheduled' || !normalized) {
+    const now = new Date();
+    const aptDate = dateTime ? new Date(dateTime) : null;
+
+    if (aptDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const checkDate = new Date(aptDate);
+      checkDate.setHours(0, 0, 0, 0);
+
+      // Se a data da consulta já passou
+      if (checkDate < today) {
+        return { label: 'Faltou', classes: 'bg-red-100 text-red-800' };
+      }
+
+      // Se a consulta é hoje, verificamos o horário limite por turno
+      if (checkDate.getTime() === today.getTime()) {
+        const hours = now.getHours();
+        if (shift === 'morning' && hours >= 13) {
+          return { label: 'Faltou', classes: 'bg-red-100 text-red-800' };
+        }
+        if (shift === 'afternoon' && hours >= 17) {
+          return { label: 'Faltou', classes: 'bg-red-100 text-red-800' };
+        }
+      }
+    }
+  }
+
   if (normalized.includes('attended') || normalized.includes('compareceu')) return { label: 'Atendido', classes: 'bg-green-100 text-green-800' };
   if (normalized.includes('missed') || normalized.includes('faltou')) return { label: 'Faltou', classes: 'bg-red-100 text-red-800' };
   if (normalized.includes('checked_in') || normalized.includes('fila')) return { label: 'Na Fila', classes: 'bg-blue-100 text-blue-800' };
@@ -107,7 +137,7 @@ export default function RecepcionistaResumoUBS() {
         setProfessionals(filteredProfs as ProfessionalSummary[]);
         setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
       } catch (err: any) {
-        console.error('Erro ao carregar resumo da UBS:', err);
+        console.error('Erro ao carregar resumo do dia:', err);
         showNotification('error', err.message || 'Erro ao carregar dados da UBS.');
       } finally {
         setLoading(false);
@@ -189,8 +219,8 @@ export default function RecepcionistaResumoUBS() {
   }, [appointments, selectedProfessionalCns, selectedProfessional]);
 
   const totalConsultations = filteredAppointments.length;
-  const attendedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status).label === 'Compareceu').length;
-  const missedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status).label === 'Faltou').length;
+  const attendedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status, apt.date_time, apt.shift).label === 'Atendido').length;
+  const missedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status, apt.date_time, apt.shift).label === 'Faltou').length;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -200,7 +230,7 @@ export default function RecepcionistaResumoUBS() {
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Resumo da UBS</h1>
+            <h1 className="text-xl font-bold text-gray-800">Resumo do Dia</h1>
             <p className="text-sm text-gray-500">Visão de funcionamento, consultas de hoje e profissionais da unidade.</p>
           </div>
         </div>
@@ -312,7 +342,7 @@ export default function RecepcionistaResumoUBS() {
                   ) : (
                     filteredAppointments.map((appointment) => {
                       const timeText = appointment.shift === 'morning' ? 'Manhã' : 'Tarde';
-                      const status = getStatusLabel(appointment.status);
+                      const status = getStatusLabel(appointment.status, appointment.date_time, appointment.shift);
 
                       return (
                         <tr key={appointment.id}>

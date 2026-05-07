@@ -50,8 +50,38 @@ export default function ProfissionalAtendimentos() {
   const [saving, setSaving] = useState(false);
   const [medsLoading, setMedsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
 
   useEffect(() => { if (profile?.cns) fetchAppointments(); }, [profile]);
+
+  // Lógica de Salvamento Automático (Debounce)
+  useEffect(() => {
+    if (!selectedApt || !clinicalContent.trim()) return;
+
+    const timer = setTimeout(async () => {
+      const patient = getPatient(selectedApt);
+      try {
+        setIsAutoSaving(true);
+        const payload = {
+          appointment_id: selectedApt.id,
+          patient_id: patient?.id || selectedApt.patient_id,
+          professional_cns: profile?.cns || '',
+          content: clinicalContent.trim(),
+          attention_points: attentionPoints,
+          vital_signs: vitalSigns,
+          updated_at: new Date().toISOString(),
+        };
+        await supabase.from('clinical_notes').upsert(payload, { onConflict: 'appointment_id' });
+      } catch (err) {
+        console.error('Erro no salvamento automático:', err);
+      } finally {
+        // Delay extra para o usuário ver o estado de "Salvando"
+        setTimeout(() => setIsAutoSaving(false), 800);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [clinicalContent, vitalSigns, attentionPoints, selectedApt]);
 
   const fetchAppointments = async () => {
     try {
@@ -81,10 +111,10 @@ export default function ProfissionalAtendimentos() {
     return filtered.sort((a, b) => {
       const statusA = a.status === 'scheduled' && a.checked_in_at ? 'checked_in' : (a.status || 'scheduled');
       const statusB = b.status === 'scheduled' && b.checked_in_at ? 'checked_in' : (b.status || 'scheduled');
-      
+
       const oa = order[statusA] ?? 1;
       const ob = order[statusB] ?? 1;
-      
+
       if (oa !== ob) return oa - ob;
       if (a.checked_in_at && b.checked_in_at) return new Date(a.checked_in_at).getTime() - new Date(b.checked_in_at).getTime();
       if (a.checked_in_at) return -1;
@@ -116,10 +146,10 @@ export default function ProfissionalAtendimentos() {
     }
 
     fetchPatientMedicines(patient);
-    fetchPatientHistory(patient);
+    fetchPatientHistory(patient, apt.id);
   };
 
-  const fetchPatientHistory = async (patient: Patient | null) => {
+  const fetchPatientHistory = async (patient: Patient | null, currentAptId?: string) => {
     if (!patient) return;
     try {
       setHistoryLoading(true);
@@ -127,7 +157,7 @@ export default function ProfissionalAtendimentos() {
         .from('clinical_notes')
         .select('*')
         .eq('patient_id', patient.id)
-        .neq('appointment_id', selectedApt?.id || 0)
+        .neq('appointment_id', currentAptId || '0')
         .order('created_at', { ascending: false })
         .limit(5);
       if (error) throw error;
@@ -204,7 +234,27 @@ export default function ProfissionalAtendimentos() {
 
   const addPoint = () => { if (newPoint.trim()) { setAttentionPoints(prev => [...prev, newPoint.trim()]); setNewPoint(''); } };
   const removePoint = (i: number) => setAttentionPoints(prev => prev.filter((_, idx) => idx !== i));
-  const updateVital = (key: keyof VitalSigns, val: string) => setVitalSigns(prev => ({ ...prev, [key]: val ? Number(val) : undefined }));
+  const updateVital = (key: keyof VitalSigns, val: string) => {
+    if (!val) {
+      setVitalSigns(prev => ({ ...prev, [key]: undefined }));
+      return;
+    }
+
+    // Limites de segurança para cada campo
+    const limits: Record<string, number> = {
+      systolic_bp: 300,
+      diastolic_bp: 250,
+      blood_glucose: 1200,
+      weight: 600
+    };
+
+    let num = Number(val);
+    const max = limits[key];
+
+    if (max && num > max) num = max;
+
+    setVitalSigns(prev => ({ ...prev, [key]: num }));
+  };
 
   const renderShiftSection = (title: string, apts: Appointment[], color: string) => (
     <section className="mb-8">
@@ -220,7 +270,7 @@ export default function ProfissionalAtendimentos() {
             const hasCheckedIn = !!apt.checked_in_at;
             const statusToShow = apt.status === 'scheduled' && hasCheckedIn ? 'checked_in' : (apt.status || 'scheduled');
             const cfg = getStatusConfig(statusToShow, hasCheckedIn);
-            
+
             const isQueue = statusToShow === 'checked_in';
             const isDone = apt.status === 'attended' || apt.status === 'missed';
             const isAbsent = statusToShow === 'scheduled' && !hasCheckedIn;
@@ -307,167 +357,226 @@ export default function ProfissionalAtendimentos() {
       {selectedApt && (() => {
         const patient = getPatient(selectedApt);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-              {/* Header Elegante */}
-              <div className="bg-gradient-to-br from-gray-900 to-blue-900 px-8 py-8 text-white flex items-center justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <User size={120} />
-                </div>
-                <div className="relative z-10">
-                  <span className="text-[10px] font-black tracking-[0.2em] text-blue-300 uppercase block mb-1">Consulta em Andamento</span>
-                  <h2 className="text-3xl font-black tracking-tight">{patient?.name || 'Paciente'}</h2>
-                  <div className="flex items-center gap-4 mt-2 text-blue-100/70 text-sm font-bold">
-                    <p className="flex items-center gap-1.5"><User size={14} /> CPF: {patient?.cpf ? formatCPF(patient.cpf) : '—'}</p>
-                    <p className="flex items-center gap-1.5"><Clock size={14} /> {selectedApt.shift === 'morning' ? 'MANHÃ' : 'TARDE'}</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-400">
+
+              {/* Header Clean e Profissional */}
+              <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 border border-amber-100">
+                    <Activity size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-gray-900">{patient?.name || 'Paciente'}</h2>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-md uppercase tracking-wider">
+                        Em Atendimento
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-gray-600 text-sm font-medium">
+                      <p className="flex items-center gap-1"><User size={16} className="text-gray-500" /> CPF: {patient?.cpf ? formatCPF(patient.cpf) : '—'}</p>
+                      <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                      <p className="flex items-center gap-1"><Clock size={16} className="text-gray-500" /> Turno: {selectedApt.shift === 'morning' ? 'MANHÃ' : 'TARDE'}</p>
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => setSelectedApt(null)} className="relative z-10 p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all duration-300 group">
-                  <X size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+                <button
+                  onClick={() => setSelectedApt(null)}
+                  className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all group"
+                >
+                  <X size={24} className="transition-transform duration-300 group-hover:rotate-90" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 lg:p-12">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                  
-                  {/* Coluna Esquerda: Informações e Sinais */}
-                  <div className="lg:col-span-5 space-y-10">
-                    
-                    {/* Sinais Vitais Quantificáveis */}
-                    <div>
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <Activity size={16} className="text-blue-500" /> Sinais Vitais (Métricas)
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">PA Sistólica</label>
-                          <div className="relative">
-                            <input type="number" min="40" max="300" value={vitalSigns.systolic_bp || ''} onChange={e => updateVital('systolic_bp', e.target.value)}
-                              className="w-full bg-gray-50 rounded-2xl border-2 border-gray-100 p-4 text-lg font-black focus:border-blue-500 focus:bg-white transition-all outline-none" placeholder="120" />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">mmHg</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">PA Diastólica</label>
-                          <div className="relative">
-                            <input type="number" min="30" max="200" value={vitalSigns.diastolic_bp || ''} onChange={e => updateVital('diastolic_bp', e.target.value)}
-                              className="w-full bg-gray-50 rounded-2xl border-2 border-gray-100 p-4 text-lg font-black focus:border-blue-500 focus:bg-white transition-all outline-none" placeholder="80" />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">mmHg</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Glicemia</label>
-                          <div className="relative">
-                            <input type="number" min="20" max="1000" value={vitalSigns.blood_glucose || ''} onChange={e => updateVital('blood_glucose', e.target.value)}
-                              className="w-full bg-gray-50 rounded-2xl border-2 border-gray-100 p-4 text-lg font-black focus:border-blue-500 focus:bg-white transition-all outline-none" placeholder="90" />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">mg/dL</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Peso</label>
-                          <div className="relative">
-                            <input type="number" step="0.1" min="0" max="500" value={vitalSigns.weight || ''} onChange={e => updateVital('weight', e.target.value)}
-                              className="w-full bg-gray-50 rounded-2xl border-2 border-gray-100 p-4 text-lg font-black focus:border-blue-500 focus:bg-white transition-all outline-none" placeholder="70.5" />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300">kg</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
 
-                    {/* Condições e Medicamentos */}
-                    <div className="bg-gray-50 rounded-[2rem] p-6 space-y-6">
-                      <div>
-                        <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-500" /> Diagnósticos Ativos</h5>
-                        {patientDiseases.length > 0
-                          ? <div className="flex flex-wrap gap-2">{patientDiseases.map(d => <span key={d} className="px-3 py-1.5 bg-white shadow-sm text-gray-700 rounded-xl text-xs font-bold border border-gray-100">{d}</span>)}</div>
-                          : <p className="text-xs text-gray-400 font-medium italic">Nenhum diagnóstico registrado.</p>}
-                      </div>
-                      <div>
-                        <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Pill size={14} className="text-blue-500" /> Farmacoterapia</h5>
-                        {medsLoading ? <div className="animate-pulse flex space-y-2 flex-col"><div className="h-8 bg-gray-200 rounded-lg w-full"></div></div>
-                          : medicines.length > 0
-                            ? <div className="space-y-2">{medicines.map(m => (
-                                <div key={m.id} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center">
-                                  <div><p className="font-bold text-gray-800 text-xs">{m.active_principle}</p><p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{m.strength} • {m.frequency_label}</p></div>
-                                </div>))}</div>
-                            : <p className="text-xs text-gray-400 font-medium italic">Sem medicamentos ativos.</p>}
-                      </div>
-                    </div>
+                  {/* Coluna Lateral: Dados e Histórico */}
+                  <div className="lg:col-span-4 bg-gray-50/30">
+                    <div className="p-8 lg:p-10 space-y-10">
 
-                    {/* Histórico Recente */}
-                    <div>
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <History size={16} /> Evolução Clínica Anterior
-                      </h4>
-                      {historyLoading ? <div className="h-20 bg-gray-50 rounded-2xl animate-pulse"></div>
-                      : pastNotes.length > 0 ? (
-                        <div className="space-y-3">
-                          {pastNotes.map(note => (
-                            <div key={note.id} className="p-4 bg-white border border-gray-100 rounded-2xl shadow-sm text-xs">
-                              <p className="font-black text-gray-400 uppercase text-[9px] mb-1">{new Date(note.created_at).toLocaleDateString('pt-BR')}</p>
-                              <p className="text-gray-600 line-clamp-2 italic font-medium">"{note.content}"</p>
-                              {note.vital_signs?.systolic_bp && (
-                                <div className="mt-2 flex gap-2 text-[10px] font-bold text-blue-600 bg-blue-50 w-fit px-2 py-0.5 rounded-lg">
-                                  PA: {note.vital_signs.systolic_bp}/{note.vital_signs.diastolic_bp}
-                                </div>
-                              )}
+                      {/* Sinais Vitais */}
+                      <section>
+                        <h4 className="text-[16px] font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                          <Activity size={24} className="text-blue-500" /> Sinais Vitais
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { label: 'PA Sistólica', key: 'systolic_bp', unit: 'mmHg', placeholder: '120', min: 40, max: 300 },
+                            { label: 'PA Diastólica', key: 'diastolic_bp', unit: 'mmHg', placeholder: '80', min: 30, max: 200 },
+                            { label: 'Glicemia', key: 'blood_glucose', unit: 'mg/dL', placeholder: '90', min: 20, max: 1000 },
+                            { label: 'Peso (kg)', key: 'weight', unit: 'kg', placeholder: '70.5', min: 0, max: 500, step: 0.1 },
+                          ].map((field) => (
+                            <div key={field.key} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-1">{field.label}</label>
+                              <div className="flex items-baseline gap-1">
+                                <input
+                                  type="number"
+                                  min={field.min}
+                                  max={field.max}
+                                  step={field.step || 1}
+                                  value={vitalSigns[field.key as keyof VitalSigns] || ''}
+                                  onChange={e => updateVital(field.key as keyof VitalSigns, e.target.value)}
+                                  className="w-full bg-transparent text-lg font-bold text-gray-800 outline-none placeholder:text-gray-300"
+                                  placeholder={field.placeholder}
+                                />
+                                <span className="text-[9px] font-bold text-gray-400">{field.unit}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      ) : <p className="text-xs text-gray-400 italic">Sem registros anteriores.</p>}
+                      </section>
+
+                      {/* Diagnósticos e Medicamentos */}
+                      <section className="space-y-6">
+                        <div>
+                          <h5 className="text-[16px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-3 flex items-center gap-2">
+                            <AlertTriangle size={24} className="text-amber-500" /> Diagnósticos Ativos
+                          </h5>
+                          {patientDiseases.length > 0
+                            ? <div className="flex flex-wrap gap-1.5">
+                              {patientDiseases.map(d => (
+                                <span key={d} className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[11px] font-semibold shadow-sm">
+                                  {d}
+                                </span>
+                              ))}
+                            </div>
+                            : <p className="text-[11px] text-gray-400 font-medium italic">Nenhum diagnóstico registrado.</p>}
+                        </div>
+
+                        <div>
+                          <h5 className="text-[16px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-3 flex items-center gap-2">
+                            <Pill size={24} className="text-blue-500" /> Medicamentos Ativos
+                          </h5>
+                          {medsLoading ? (
+                            <div className="space-y-2">
+                              <div className="h-10 bg-gray-100 rounded-xl animate-pulse w-full"></div>
+                              <div className="h-10 bg-gray-100 rounded-xl animate-pulse w-3/4"></div>
+                            </div>
+                          ) : medicines.length > 0 ? (
+                            <div className="space-y-2">
+                              {medicines.map(m => (
+                                <div key={m.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                                  <p className="font-bold text-gray-800 text-[11px] leading-tight">{m.active_principle}</p>
+                                  <p className="text-[9px] text-gray-600 font-medium mt-0.5">{m.strength} • {m.frequency_label}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-gray-400 font-medium italic">Sem medicamentos ativos.</p>
+                          )}
+                        </div>
+                      </section>
+
+                      {/* Histórico Anterior */}
+                      <section>
+                        <h4 className="text-[16px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-4 flex items-center gap-2">
+                          <History size={24} className="text-gray-500" /> Evolução Recente
+                        </h4>
+                        {historyLoading ? (
+                          <div className="h-24 bg-gray-100 rounded-2xl animate-pulse"></div>
+                        ) : pastNotes.length > 0 ? (
+                          <div className="space-y-3">
+                            {pastNotes.map(note => (
+                              <div key={note.id} className="p-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
+                                <p className="font-bold text-gray-500 uppercase text-[9px] mb-1.5">
+                                  {new Date(note.created_at).toLocaleDateString('pt-BR')}
+                                </p>
+                                <p className="text-gray-600 text-xs leading-relaxed line-clamp-3 font-medium">
+                                  {note.content}
+                                </p>
+                                {note.vital_signs?.systolic_bp && (
+                                  <div className="mt-2.5 flex gap-2 text-[10px] font-bold text-blue-600">
+                                    PA: {note.vital_signs.systolic_bp}/{note.vital_signs.diastolic_bp} mmHg
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-gray-400 italic">Sem registros anteriores.</p>
+                        )}
+                      </section>
                     </div>
                   </div>
 
-                  {/* Coluna Direita: Notas e Pontos */}
-                  <div className="lg:col-span-7 space-y-10">
-                    
-                    {/* Relato Clínico Principal */}
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                        <Activity size={16} className="text-green-500" /> Relato Clínico e Conduta
-                      </h4>
-                      <textarea value={clinicalContent} onChange={e => setClinicalContent(e.target.value)}
-                        className="w-full rounded-[2rem] border-2 border-gray-100 bg-gray-50 p-8 text-lg font-medium focus:border-green-500 focus:bg-white transition-all outline-none min-h-[300px] shadow-inner"
-                        placeholder="Descreva aqui a evolução do paciente, queixas atuais e conduta médica..." />
-                    </div>
+                  {/* Coluna Principal: Evolução e Conduta */}
+                  <div className="lg:col-span-8 bg-white">
+                    <div className="p-8 lg:p-10 space-y-10">
 
-                    {/* Pontos de Atenção (Alertas) */}
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                        <AlertTriangle size={16} className="text-amber-500" /> Pontos de Atenção Próxima
-                      </h4>
-                      <div className="flex gap-3">
-                        <input value={newPoint} onChange={e => setNewPoint(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addPoint())}
-                          className="flex-1 rounded-2xl border-2 border-gray-100 bg-gray-50 px-6 py-4 font-bold focus:border-amber-500 transition-all outline-none shadow-sm"
-                          placeholder="Ex: Monitorar febre persistente..." />
-                        <button onClick={addPoint} className="bg-amber-500 text-white w-14 h-14 rounded-2xl flex items-center justify-center hover:bg-amber-600 transition-all shadow-lg shadow-amber-100">
-                          <Plus size={24} />
-                        </button>
+                      {/* Área de Texto Principal */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-[16px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                            <Activity size={24} className="text-green-500" /> Relato Clínico e Conduta
+                          </h4>
+                          <span className="text-[12px] text-gray-400 font-bold uppercase">Registro Obrigatório</span>
+                        </div>
+                        <textarea
+                          value={clinicalContent}
+                          onChange={e => setClinicalContent(e.target.value)}
+                          className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 p-6 text-base font-medium text-gray-800 focus:border-green-500 focus:bg-white focus:ring-4 focus:ring-green-50 transition-all outline-none min-h-[350px] leading-relaxed resize-none placeholder:text-gray-400"
+                          placeholder="Descreva aqui a evolução do paciente, queixas atuais e conduta médica..."
+                        />
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {attentionPoints.map((p, i) => (
-                          <div key={i} className="flex items-center gap-3 bg-amber-50 border-2 border-amber-100 text-amber-800 px-5 py-3 rounded-2xl font-bold animate-in zoom-in-50 duration-300">
-                            <span>{p}</span>
-                            <button onClick={() => removePoint(i)} className="text-amber-300 hover:text-amber-600 transition-colors"><X size={18} /></button>
-                          </div>
-                        ))}
+
+                      {/* Pontos de Atenção */}
+                      <div className="space-y-4">
+                        <h4 className="text-[16px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                          <AlertTriangle size={24} className="text-amber-500" /> Pontos de Atenção para Próxima Consulta
+                        </h4>
+                        <div className="flex gap-2">
+                          <input
+                            value={newPoint}
+                            onChange={e => setNewPoint(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addPoint())}
+                            className="flex-1 rounded-xl border-2 border-gray-50 bg-gray-50/50 px-5 py-3.5 text-sm font-semibold text-gray-700 focus:border-amber-500 focus:bg-white transition-all outline-none placeholder:text-gray-400"
+                            placeholder="Ex: Monitorar febre persistente..."
+                          />
+                          <button
+                            onClick={addPoint}
+                            className="bg-amber-500 text-white px-5 rounded-xl flex items-center justify-center hover:bg-amber-600 transition-all shadow-lg shadow-amber-100 font-bold text-sm"
+                          >
+                            ADICIONAR
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {attentionPoints.map((p, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-bold animate-in zoom-in-95 duration-200">
+                              <span>{p}</span>
+                              <button onClick={() => removePoint(i)} className="text-amber-300 hover:text-amber-600 transition-colors group">
+                                <X size={14} className="transition-transform duration-300 group-hover:rotate-45" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Footer de Ação Massiva */}
-              <div className="p-6 lg:p-8 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest hidden lg:block">Registro seguro no prontuário eletrônico</p>
+              {/* Footer de Ação */}
+              <div className="p-6 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-[12px] text-gray-500 font-bold uppercase tracking-wider">
+                  <div className={`w-1.5 h-1.5 rounded-full ${isAutoSaving ? 'bg-amber-500 animate-bounce' : 'bg-green-500'}`}></div>
+                  {isAutoSaving ? 'Salvando alterações...' : 'Alterações salvas'}
+                </div>
                 <div className="flex flex-col-reverse sm:flex-row gap-3 w-full sm:w-auto">
-                   <button onClick={() => setSelectedApt(null)} className="px-8 py-3 rounded-2xl font-black text-gray-400 hover:text-gray-600 transition-all text-sm">CANCELAR</button>
-                   <button onClick={handleFinalize} disabled={saving} 
-                    className="flex items-center justify-center gap-2 bg-green-600 text-white px-8 py-4 rounded-2xl font-black text-sm lg:text-base hover:bg-green-700 transition-all shadow-xl shadow-green-200 disabled:opacity-50 active:scale-95 whitespace-nowrap min-w-[240px]">
-                    {saving ? 'SALVANDO...' : (
+                  <button
+                    onClick={() => setSelectedApt(null)}
+                    className="px-6 py-3 rounded-xl font-bold text-gray-500 hover:text-gray-700 transition-all text-xs uppercase tracking-widest"
+                  >
+                    Sair sem salvar
+                  </button>
+                  <button
+                    onClick={handleFinalize}
+                    disabled={saving}
+                    className="flex items-center justify-center gap-2 bg-green-600 text-white px-10 py-3.5 rounded-xl font-bold text-sm hover:bg-green-700 transition-all shadow-xl shadow-green-100 disabled:opacity-50 active:scale-95 whitespace-nowrap"
+                  >
+                    {saving ? 'PROCESSANDO...' : (
                       <>
-                        <CheckCircle size={20} /> FINALIZAR ATENDIMENTO
+                        <CheckCircle size={18} /> FINALIZAR ATENDIMENTO
                       </>
                     )}
                   </button>

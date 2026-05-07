@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService, type CnesHorario } from '../../lib/cnesService';
-import { LogOut, Calendar, UserPlus, Clipboard, Clock } from 'lucide-react';
+import { LogOut, Calendar, UserPlus, Clipboard, Clock, Plus } from 'lucide-react';
 
 interface UnidadeInfo {
     name?: string;
@@ -113,7 +113,7 @@ export default function RecepcionistaDashboard() {
                 <h1 className="text-xl font-bold text-gray-800">Painel da Recepção</h1>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-600 font-medium">{profile?.name}</span>
-                    <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer">
+                    <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer font-bold text-sm">
                         <LogOut size={18} /> Sair
                     </button>
                 </div>
@@ -159,37 +159,31 @@ export default function RecepcionistaDashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <button onClick={() => navigate('/recepcionista/resumo')} className="h-full text-left bg-white p-6 rounded-lg shadow border-t-4 border-purple-500 hover:shadow-lg transition">
-                        <div className="flex h-full flex-col justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <Clipboard className="text-purple-500 h-8 w-8" />
-                                <div>
-                                    <h2 className="text-lg font-semibold">Resumo da UBS</h2>
-                                    <p className="mt-2 text-gray-600">Veja horário de funcionamento, consultas de hoje e profissionais da unidade.</p>
-                                </div>
+                        <div className="flex items-center gap-4 h-full">
+                            <Clipboard className="text-purple-500 h-8 w-8 shrink-0" />
+                            <div>
+                                <h2 className="text-lg font-semibold">Resumo do Dia</h2>
+                                <p className="mt-1 text-gray-600 text-sm leading-relaxed">Veja consultas de hoje e profissionais da unidade.</p>
                             </div>
                         </div>
                     </button>
 
                     <button onClick={() => navigate('/recepcionista/pacientes')} className="h-full text-left bg-white p-6 rounded-lg shadow border-t-4 border-green-500 hover:shadow-lg transition">
-                        <div className="flex h-full flex-col justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <UserPlus className="text-green-500 h-8 w-8" />
-                                <div>
-                                    <h2 className="text-lg font-semibold">Gestão de Pacientes</h2>
-                                    <p className="mt-2 text-gray-600">Cadastre, busque e edite pacientes.</p>
-                                </div>
+                        <div className="flex items-center gap-4 h-full">
+                            <UserPlus className="text-green-500 h-8 w-8 shrink-0" />
+                            <div>
+                                <h2 className="text-lg font-semibold">Gestão de Pacientes</h2>
+                                <p className="mt-1 text-gray-600 text-sm leading-relaxed">Cadastre, busque e edite pacientes.</p>
                             </div>
                         </div>
                     </button>
 
                     <button onClick={() => navigate('/recepcionista/agenda')} className="h-full text-left bg-white p-6 rounded-lg shadow border-t-4 border-blue-500 hover:shadow-lg transition">
-                        <div className="flex h-full flex-col justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <Calendar className="text-blue-500 h-8 w-8" />
-                                <div>
-                                    <h2 className="text-lg font-semibold">Agenda</h2>
-                                    <p className="mt-2 text-gray-600">Selecione um profissional para carregar a agenda dele ou deixe em branco para bloquear datas da unidade.</p>
-                                </div>
+                        <div className="flex items-center gap-4 h-full">
+                            <Calendar className="text-blue-500 h-8 w-8 shrink-0" />
+                            <div>
+                                <h2 className="text-lg font-semibold">Agenda</h2>
+                                <p className="mt-1 text-gray-600 text-sm leading-relaxed">Visualize a agenda completa da unidade.</p>
                             </div>
                         </div>
                     </button>

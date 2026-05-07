@@ -28,7 +28,7 @@ export default function Login() {
 
         // Assuming CPF format is numbers only and matches a custom email or identity in Supabase 
         // This usually implies you either authenticate with a custom function or CPF@hiperdiario.app pattern
-        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.app`;
+        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.web`;
 
         const { error } = await supabase.auth.signInWithPassword({
             email: emailFormat,

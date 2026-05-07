@@ -103,6 +103,17 @@ function formatCpf(cpf?: string | number | null) {
   return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 }
 
+function formatDateDisplay(dateString?: string | null) {
+  if (!dateString) return 'Data n/i';
+  try {
+    const [year, month, day] = dateString.split('-');
+    if (!year || !month || !day) return dateString;
+    return `${day}/${month}/${year}`;
+  } catch (e) {
+    return dateString;
+  }
+}
+
 function formatPhone(phone?: string | null) {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
@@ -147,6 +158,16 @@ export default function RecepcionistaPacientes() {
     fetchPatients();
   }, [profile]);
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showModal) {
+        resetForm();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showModal]);
+
   const fetchPatients = async () => {
     try {
       setLoading(true);
@@ -156,7 +177,7 @@ export default function RecepcionistaPacientes() {
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
         if (numeric.length > 0) {
-          query = query.or(`name.ilike.%${filterQuery}%,cpf.eq.${numeric}`);
+          query = query.or(`name.ilike.%${filterQuery}%,cpf.ilike.%${numeric}%`);
         } else {
           query = query.ilike('name', `%${filterQuery}%`);
         }
@@ -270,9 +291,6 @@ export default function RecepcionistaPacientes() {
     if (!form.city_ibge) errors.push('city_ibge');
     if (!form.ubs_cnes) errors.push('ubs_cnes');
     if (form.zip_code.replace(/\D/g, '').length !== 8) errors.push('zip_code');
-    if (!form.emergency_name.trim()) errors.push('emergency_name');
-    if (!form.emergency_phone.replace(/\D/g, '')) errors.push('emergency_phone');
-    if (!form.emergency_relationship) errors.push('emergency_relationship');
 
     // Validação de Senha: obrigatória para novos, e no mínimo 6 caracteres se preenchida
     if (!editing && (!form.password || form.password.length < 6)) {
@@ -528,7 +546,7 @@ export default function RecepcionistaPacientes() {
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-900">{p.name.toUpperCase()}</p>
-                            <p className="text-xs text-gray-500">{p.gender?.toUpperCase() || 'Não informado'} • {p.birth_date ? new Date(p.birth_date).toLocaleDateString('pt-BR') : 'Data n/i'}</p>
+                            <p className="text-xs text-gray-500">{p.gender?.toUpperCase() || 'Não informado'} • {formatDateDisplay(p.birth_date)}</p>
                           </div>
                         </div>
                       </td>
@@ -656,6 +674,7 @@ export default function RecepcionistaPacientes() {
                       />
                       <button
                         type="button"
+                        tabIndex={-1}
                         onClick={() => {
                           setActiveDropdown(activeDropdown === 'birth_date' ? null : 'birth_date');
                           if (form.birth_date) {
@@ -764,7 +783,6 @@ export default function RecepcionistaPacientes() {
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Sexo</label>
                     <div
                       data-name="gender"
-                      tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('gender') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
                       <CustomSelect
@@ -888,7 +906,6 @@ export default function RecepcionistaPacientes() {
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Estado (UF)</label>
                     <div
                       data-name="state_code"
-                      tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('state_code') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
                       <CustomSelect
@@ -912,7 +929,6 @@ export default function RecepcionistaPacientes() {
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Município</label>
                     <div
                       data-name="city_ibge"
-                      tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('city_ibge') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
                       <CustomSelect
@@ -940,7 +956,6 @@ export default function RecepcionistaPacientes() {
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Unidade de Saúde (UBS)</label>
                     <div
                       data-name="ubs_cnes"
-                      tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('ubs_cnes') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
                       <CustomSelect
@@ -972,7 +987,7 @@ export default function RecepcionistaPacientes() {
               <div className="mb-2">
                 <h4 className="text-xs font-bold text-green-700 mb-4 flex items-center gap-2 tracking-[0.2em]">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                  CONTATO DE EMERGÊNCIA
+                  CONTATO DE EMERGÊNCIA (OPCIONAL)
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
                   <div className="md:col-span-2">
@@ -987,7 +1002,7 @@ export default function RecepcionistaPacientes() {
                       }}
                       maxLength={100}
                       className={`w-full rounded-xl border p-3 focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all font-medium ${formErrors.includes('emergency_name') ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-gray-50 text-gray-900'}`}
-                      placeholder="Nome da pessoa de contato"
+                      placeholder="Ex: Fulano da Silva"
                     />
                   </div>
                   <div>
@@ -1009,7 +1024,6 @@ export default function RecepcionistaPacientes() {
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Parentesco</label>
                     <div
                       data-name="emergency_relationship"
-                      tabIndex={-1}
                       className={`rounded-xl transition-all ${formErrors.includes('emergency_relationship') ? 'ring-2 ring-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.1)]' : 'outline-none'}`}
                     >
                       <CustomSelect
@@ -1020,6 +1034,8 @@ export default function RecepcionistaPacientes() {
                         }}
                         placeholder="Selecione..."
                         searchable={false}
+                        forceDirection="down"
+
                         options={RELATIONSHIP_OPTIONS.map(opt => ({ value: opt, label: opt }))}
                       />
                     </div>

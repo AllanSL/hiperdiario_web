@@ -116,6 +116,7 @@ export default function RecepcionistaAgenda() {
   const [creatingAppointment, setCreatingAppointment] = useState(false);
   const [blockingDate, setBlockingDate] = useState(false);
   const [blockReason, setBlockReason] = useState('Bloqueio de agenda');
+  const [blockShift, setBlockShift] = useState<'all' | 'morning' | 'afternoon'>('all');
 
   // Filtros para a visão da Unidade (quando nenhum profissional está selecionado)
   const [unitFilterShift, setUnitFilterShift] = useState<ShiftType | 'all'>('all');
@@ -216,6 +217,16 @@ export default function RecepcionistaAgenda() {
     }
   }, [profile, currentMonth, fetchData]);
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showAppointmentModal) {
+        handleCancelEdit();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showAppointmentModal]);
+
 
 
   useEffect(() => {
@@ -294,6 +305,7 @@ export default function RecepcionistaAgenda() {
   const handleCancelEdit = () => {
     setEditingAppointment(null);
     setSelectedPatient(null);
+    setPatientSearch('');
     setShowAppointmentModal(false);
     setActiveDropdown(null);
     setMiniCalendarMonth(selectedDate);
@@ -408,11 +420,14 @@ export default function RecepcionistaAgenda() {
       showNotification('error', 'Selecione um paciente válido antes de agendar.');
       return;
     }
-    if (!selectedProfessionalCns) {
-      showNotification('error', 'Selecione um profissional no filtro do calendário.');
+    const targetProfCns = appointmentForm.professionalCns || selectedProfessionalCns;
+
+    if (!targetProfCns) {
+      showNotification('error', 'Selecione um profissional para o agendamento.');
       return;
     }
-    const professional = selectedProfessional;
+
+    const professional = professionals.find(p => p.cns === targetProfCns);
     const dateTime = calculateDateTimeFromShift(appointmentForm.date, appointmentForm.shift);
 
     // Validação de data e turno retroativos
@@ -439,8 +454,14 @@ export default function RecepcionistaAgenda() {
           professional?.specialty || '',
           appointmentForm.shift,
           appointmentForm.date,
-          professional?.cns
+          targetProfCns
         );
+
+        if (availability.isBlocked) {
+          showNotification('error', `Não é possível agendar: esta data está bloqueada para ${targetProfCns ? 'este profissional' : 'toda a unidade'}.`);
+          setCreatingAppointment(false);
+          return;
+        }
 
         if (availability.isFull) {
           showNotification('error', `Capacidade máxima atingida para o turno da ${appointmentForm.shift === 'morning' ? 'manhã' : 'tarde'} (${availability.booked}/5).`);
@@ -454,7 +475,7 @@ export default function RecepcionistaAgenda() {
         notes: appointmentForm.notes,
         cnes_id: profile?.cnes || '',
         specialty: professional?.specialty || '',
-        professional_cns: professional?.cns || null,
+        professional_cns: targetProfCns,
         patient_id: selectedPatient.id,
         shift: appointmentForm.shift,
       };
@@ -518,12 +539,23 @@ export default function RecepcionistaAgenda() {
   };
 
   const handleToggleBlock = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(selectedDate);
+    checkDate.setHours(0, 0, 0, 0);
+    const isPast = checkDate < today;
+
     const isUnitBlock = !selectedProfessionalCns;
     const currentBlocks = isUnitBlock
-      ? selectedDateBlocks.filter(blk => !blk.professional_cns)
-      : selectedDateBlocks.filter(blk => blk.professional_cns === selectedProfessionalCns);
+      ? selectedDateBlocks.filter(blk => !blk.professional_cns && (blockShift === 'all' ? true : blk.shift === blockShift))
+      : selectedDateBlocks.filter(blk => blk.professional_cns === selectedProfessionalCns && (blockShift === 'all' ? true : blk.shift === blockShift));
 
     const alreadyBlocked = currentBlocks.length > 0;
+
+    if (isPast) {
+      showNotification('error', 'Não é possível alterar bloqueios em datas retroativas.');
+      return;
+    }
 
     const hasAppointments = isUnitBlock
       ? selectedDateAppointments.length > 0
@@ -537,10 +569,12 @@ export default function RecepcionistaAgenda() {
           professional_cns: isUnitBlock ? null : selectedProfessional?.cns || null,
           cnes_id: profile?.cnes || '',
           reason: blockReason || (isUnitBlock ? 'Bloqueio de unidade' : `Bloqueio de agenda`),
+          shift: blockShift
         };
         const { error } = await supabase.from('blocked_times').insert([block]);
         if (error) throw error;
-        showNotification('success', `Data bloqueada para ${isUnitBlock ? 'todos os profissionais da unidade' : selectedProfessional?.name}.`);
+        const shiftLabel = blockShift === 'all' ? 'o dia todo' : (blockShift === 'morning' ? 'o turno da manhã' : 'o turno da tarde');
+        showNotification('success', `Bloqueio realizado para ${shiftLabel} (${isUnitBlock ? 'Unidade' : selectedProfessional?.name}).`);
         setBlockReason('');
         fetchData();
       } catch (err: any) {
@@ -611,7 +645,7 @@ export default function RecepcionistaAgenda() {
               profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não informada'
             )}
           </div>
-          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 transition">
+          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 transition font-bold text-sm shadow-sm">
             <Search size={16} /> Atualizar
           </button>
         </div>
@@ -628,14 +662,20 @@ export default function RecepcionistaAgenda() {
             {(() => {
               const isUnitBlock = !selectedProfessionalCns;
               const currentBlocks = selectedDateBlocks.filter(blk => {
-                if (isUnitBlock) return !blk.professional_cns;
-                return blk.professional_cns === selectedProfessionalCns;
+                const matchesProf = isUnitBlock ? !blk.professional_cns : blk.professional_cns === selectedProfessionalCns;
+                return matchesProf && (blockShift === 'all' ? blk.shift === 'all' : blk.shift === blockShift);
               });
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const checkDate = new Date(selectedDate);
+              checkDate.setHours(0, 0, 0, 0);
+              const isPastDate = checkDate < today;
+
               const alreadyBlocked = currentBlocks.length > 0;
 
               const appointmentsToCheck = isUnitBlock
-                ? selectedDateAppointments
-                : selectedDateAppointments.filter(a => a.professional_cns === selectedProfessionalCns);
+                ? selectedDateAppointments.filter(a => blockShift === 'all' ? true : a.shift === blockShift)
+                : selectedDateAppointments.filter(a => a.professional_cns === selectedProfessionalCns && (blockShift === 'all' ? true : a.shift === blockShift));
 
               return (
                 <section className="bg-white shadow rounded-lg p-6 mb-6">
@@ -652,26 +692,60 @@ export default function RecepcionistaAgenda() {
                       </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-end gap-3 w-full sm:w-auto">
-                      <div className="w-full sm:w-64">
+                    <div className="flex flex-col sm:flex-row items-end gap-3">
+                      <div className="w-full sm:w-80">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Motivo do bloqueio</label>
                         <input
                           type="text"
                           value={blockReason}
                           onChange={(e) => setBlockReason(e.target.value)}
-                          className="block w-full rounded-md border border-gray-300 shadow-sm p-2 text-sm focus:border-red-500 focus:ring-red-500"
+                          maxLength={30}
+                          className="block w-full h-10 rounded-md border border-gray-300 shadow-sm px-3 text-sm focus:border-red-500 focus:ring-red-500"
                           placeholder={isUnitBlock ? "Ex: Reunião de equipe" : "Ex: Férias, Atestado"}
                         />
                       </div>
 
-                      <div className="w-full sm:w-auto">
+                      <div className="w-full sm:w-48 relative">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Turno</label>
+                        <button
+                          type="button"
+                          onClick={() => setActiveDropdown(activeDropdown === 'blockShift' ? null : 'blockShift')}
+                          className="w-full h-10 flex items-center justify-between rounded-md border border-gray-300 shadow-sm px-3 text-sm bg-white hover:bg-gray-50 transition"
+                        >
+                          <span>{blockShift === 'all' ? 'Dia Inteiro' : (blockShift === 'morning' ? 'Manhã' : 'Tarde')}</span>
+                          <ChevronLeft size={16} className={`text-gray-400 transition-transform ${activeDropdown === 'blockShift' ? 'rotate-90' : '-rotate-90'}`} />
+                        </button>
+
+                        {activeDropdown === 'blockShift' && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setActiveDropdown(null)} />
+                            <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-20 animate-in fade-in slide-in-from-top-2 duration-200">
+                              {[
+                                { id: 'all', label: 'Dia Inteiro' },
+                                { id: 'morning', label: 'Manhã' },
+                                { id: 'afternoon', label: 'Tarde' }
+                              ].map((shift) => (
+                                <button
+                                  key={shift.id}
+                                  onClick={() => { setBlockShift(shift.id as any); setActiveDropdown(null); }}
+                                  className={`w-full px-4 py-2 text-left text-sm hover:bg-red-50 transition border-b border-gray-50 last:border-0 ${blockShift === shift.id ? 'bg-red-50 text-red-700 font-bold' : 'text-gray-700'}`}
+                                >
+                                  {shift.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="w-full sm:w-48">
                         <button
                           type="button"
                           onClick={handleToggleBlock}
-                          disabled={blockingDate}
-                          className={`w-full sm:w-auto inline-flex justify-center items-center gap-2 rounded-md px-6 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${alreadyBlocked ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'}`}
+                          disabled={blockingDate || isPastDate}
+                          className={`w-full h-10 inline-flex justify-center items-center gap-2 rounded-md px-6 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${alreadyBlocked ? 'bg-gray-600 hover:bg-gray-700' : 'bg-red-600 hover:bg-red-700'} ${isPastDate ? 'grayscale cursor-not-allowed' : ''}`}
                         >
-                          {blockingDate ? 'Processando...' : (alreadyBlocked ? 'Desbloquear Data' : 'Confirmar Bloqueio')}
+                          {blockingDate ? 'Processando...' : (isPastDate ? (alreadyBlocked ? 'Bloqueio Permanente' : 'Data Retroativa') : (alreadyBlocked ? (blockShift === 'all' ? 'Desbloquear Dia' : 'Desbloquear Turno') : (blockShift === 'all' ? 'Bloquear Dia' : 'Bloquear Turno')))}
                         </button>
                       </div>
                     </div>
@@ -683,7 +757,7 @@ export default function RecepcionistaAgenda() {
                         <Plus className="rotate-45" size={16} />
                       </div>
                       <span>
-                        Atenção: {appointmentsToCheck.length === 1 ? 'Existe' : 'Existem'} <strong>{appointmentsToCheck.length} {appointmentsToCheck.length === 1 ? 'consulta' : 'consultas'}</strong> já agendadas para este filtro.
+                        Atenção: {appointmentsToCheck.length === 1 ? 'Existe' : 'Existem'} <strong>{appointmentsToCheck.length} {appointmentsToCheck.length === 1 ? 'consulta' : 'consultas'}</strong> já agendadas para este {blockShift === 'all' ? 'filtro' : 'turno'}.
                         O bloqueio impedirá novas marcações, mas as existentes permanecerão visíveis.
                       </span>
                     </div>
@@ -777,6 +851,24 @@ export default function RecepcionistaAgenda() {
                           </>
                         )}
                       </div>
+
+                      <button
+                        onClick={() => {
+                          setEditingAppointment(null);
+                          setSelectedPatient(null);
+                          setAppointmentForm(prev => ({
+                            ...prev,
+                            date: selectedDate.toISOString().split('T')[0],
+                            notes: '',
+                            status: 'scheduled',
+                            professionalCns: selectedProfessionalCns
+                          }));
+                          setShowAppointmentModal(true);
+                        }}
+                        className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-white font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-100"
+                      >
+                        <Plus size={20} /> Agendar Consulta
+                      </button>
                     </div>
                   </div>
 
@@ -879,17 +971,6 @@ export default function RecepcionistaAgenda() {
                           </div>
                         </div>
 
-                        <div className="border-t border-gray-200 pt-6">
-                          <button
-                            onClick={() => {
-                              handleCancelEdit();
-                              setShowAppointmentModal(true);
-                            }}
-                            className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-4 rounded-xl font-bold hover:bg-green-700 transition shadow-lg shadow-green-100"
-                          >
-                            <Plus size={24} /> Agendar Consulta
-                          </button>
-                        </div>
                       </section>
 
                       <section className="bg-white shadow rounded-lg p-6">
@@ -1133,17 +1214,66 @@ export default function RecepcionistaAgenda() {
                   </div>
 
                   <div className="p-6 max-h-[80vh] overflow-y-auto">
-                    <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-300 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                        {selectedProfessional?.name.charAt(0)}
+                    {editingAppointment && (
+                      <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-300 flex items-center gap-4">
+                        <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                          {selectedProfessional?.name?.charAt(0) || '?'}
+                        </div>
+                        <div>
+                          <p className="font-bold text-green-900">{selectedProfessional?.name}</p>
+                          <p className="text-sm text-green-700">{selectedProfessional?.specialty} • {selectedDate.toLocaleDateString('pt-BR')}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-green-900">{selectedProfessional?.name}</p>
-                        <p className="text-sm text-green-700">{selectedProfessional?.specialty} • {selectedDate.toLocaleDateString('pt-BR')}</p>
-                      </div>
-                    </div>
+                    )}
 
                     <form onSubmit={handleCreateAppointment} className="space-y-5">
+                      {!editingAppointment && (
+                        <div className="relative">
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">Profissional</label>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdown(activeDropdown === 'modalProf' ? null : 'modalProf')}
+                              className={`flex items-center justify-between w-full rounded-xl border shadow-sm p-3 transition text-left bg-white ${activeDropdown === 'modalProf' ? 'border-green-500 ring-1 ring-green-500' : 'border-gray-300'}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                {appointmentForm.professionalCns ? (
+                                  <div className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-bold text-xs">
+                                    {professionals.find(p => p.cns === appointmentForm.professionalCns)?.name.charAt(0)}
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center font-bold text-xs">?</div>
+                                )}
+                                <span className="text-base font-medium text-gray-800">
+                                  {appointmentForm.professionalCns ? formatCapitalize(professionals.find(p => p.cns === appointmentForm.professionalCns)?.name || '') : 'Selecione o profissional...'}
+                                </span>
+                              </div>
+                              <ChevronLeft size={18} className={`text-gray-400 transition-transform duration-200 ${activeDropdown === 'modalProf' ? 'rotate-90' : '-rotate-90'}`} />
+                            </button>
+
+                            {activeDropdown === 'modalProf' && (
+                              <>
+                                <div className="fixed inset-0 z-[60]" onClick={() => setActiveDropdown(null)} />
+                                <div className="absolute top-full left-0 mt-2 z-[70] bg-white border border-gray-200 shadow-2xl rounded-2xl overflow-hidden w-full animate-in fade-in slide-in-from-top-2 duration-200 max-h-48 overflow-y-auto custom-scrollbar">
+                                  {professionals.map((prof) => (
+                                    <button
+                                      key={prof.cns}
+                                      type="button"
+                                      onClick={() => {
+                                        setAppointmentForm({ ...appointmentForm, professionalCns: prof.cns });
+                                        setActiveDropdown(null);
+                                      }}
+                                      className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition border-t border-gray-100 ${appointmentForm.professionalCns === prof.cns ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
+                                    >
+                                      {formatCapitalize(prof.name)} - <span className="text-xs text-gray-400">{prof.specialty}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {!editingAppointment && (
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente (Busca por CPF)</label>
@@ -1304,53 +1434,6 @@ export default function RecepcionistaAgenda() {
                                     </>
                                   );
                                 })()}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="relative">
-                          <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-                          <button
-                            type="button"
-                            onClick={() => setActiveDropdown(activeDropdown === 'status' ? null : 'status')}
-                            className={`flex items-center justify-between w-full rounded-xl border shadow-sm p-3 transition text-left bg-white ${activeDropdown === 'status' ? 'border-green-500 ring-1 ring-green-500' : 'border-gray-300'}`}
-                          >
-                            <span className="text-base font-medium text-gray-800">
-                              {(() => {
-                                switch (appointmentForm.status) {
-                                  case 'scheduled': return 'Agendada';
-                                  case 'in_progress': return 'Em andamento';
-                                  case 'attended': return 'Compareceu';
-                                  case 'missed': return 'Faltou';
-                                  default: return appointmentForm.status;
-                                }
-                              })()}
-                            </span>
-                            <ChevronLeft size={18} className={`text-gray-400 transition-transform duration-200 ${activeDropdown === 'status' ? 'rotate-90' : '-rotate-90'}`} />
-                          </button>
-
-                          {activeDropdown === 'status' && (
-                            <>
-                              <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdown(null)} />
-                              <div className="absolute top-full left-0 mt-2 z-[60] bg-white border border-gray-200 shadow-2xl rounded-2xl overflow-hidden w-full animate-in fade-in slide-in-from-top-2 duration-200">
-                                {[
-                                  { id: 'scheduled', label: 'Agendada' },
-                                  { id: 'in_progress', label: 'Em andamento' },
-                                  { id: 'attended', label: 'Compareceu' },
-                                  { id: 'missed', label: 'Faltou' }
-                                ].map((item, idx) => (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => { setAppointmentForm({ ...appointmentForm, status: item.id }); setActiveDropdown(null); }}
-                                    className={`w-full px-4 py-3 text-left text-sm font-medium hover:bg-green-50 transition ${idx > 0 ? 'border-t border-gray-100' : ''} ${appointmentForm.status === item.id ? 'text-green-700 bg-green-50' : 'text-gray-700'}`}
-                                  >
-                                    {item.label}
-                                  </button>
-                                ))}
                               </div>
                             </>
                           )}

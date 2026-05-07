@@ -143,7 +143,7 @@ export default function ProfissionalAgenda() {
 
     const getStatusText = (status: string | null) => {
         const s = status?.toLowerCase();
-        if (s === 'attended' || s === 'compareceu') return 'Compareceu';
+        if (s === 'attended' || s === 'compareceu') return 'Atendido';
         if (s === 'missed' || s === 'faltou') return 'Faltou';
         return 'Agendada';
     };

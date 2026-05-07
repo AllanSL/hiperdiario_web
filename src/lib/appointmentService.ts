@@ -38,14 +38,28 @@ export class AppointmentService {
 
       if (error) throw error;
 
-      const booked = data?.length || 0;
-      const available = Math.max(0, SHIFT_CAPACITY - booked);
-      const isFull = booked >= SHIFT_CAPACITY;
+      // Check for blocks
+      const { data: blocks, error: blocksError } = await supabase
+        .from('blocked_times')
+        .select('id, professional_cns')
+        .eq('cnes_id', cnes_id)
+        .gte('date_time', startOfDay)
+        .lte('date_time', endOfDay);
 
-      return { booked, available, isFull };
+      if (blocksError) throw blocksError;
+
+      const isUnitBlocked = blocks?.some(b => b.professional_cns === null);
+      const isProfBlocked = professional_cns && blocks?.some(b => b.professional_cns === professional_cns);
+      const isBlocked = isUnitBlocked || isProfBlocked;
+
+      const booked = data?.length || 0;
+      const available = isBlocked ? 0 : Math.max(0, SHIFT_CAPACITY - booked);
+      const isFull = isBlocked || booked >= SHIFT_CAPACITY;
+
+      return { booked, available, isFull, isBlocked: !!isBlocked };
     } catch (error: unknown) {
       console.error('Erro ao verificar disponibilidade:', error);
-      return { booked: 0, available: SHIFT_CAPACITY, isFull: false };
+      return { booked: 0, available: SHIFT_CAPACITY, isFull: false, isBlocked: false };
     }
   }
 

@@ -131,7 +131,7 @@ export default function Register() {
 
         setLoading(true);
 
-        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.app`;
+        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.web`;
         const role = mapEspecialidadeToRole(selectedProfissional.specialty);
 
         try {

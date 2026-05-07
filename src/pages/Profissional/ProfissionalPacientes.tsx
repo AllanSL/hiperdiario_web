@@ -84,7 +84,7 @@ export default function ProfissionalPacientes() {
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
         if (numeric.length > 0) {
-          query = query.or(`name.ilike.%${filterQuery}%,cpf.eq.${numeric}`);
+          query = query.or(`name.ilike.%${filterQuery}%,cpf.ilike.%${numeric}%`);
         } else {
           query = query.ilike('name', `%${filterQuery}%`);
         }

@@ -89,7 +89,7 @@ export function getShiftFromHour(hour: number): ShiftType {
 
 // Status labels and colors for UI
 export const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  scheduled: { label: 'Não chegou', color: 'text-gray-600', bgColor: 'bg-gray-100', borderColor: 'border-gray-200' },
+  scheduled: { label: 'Não chegou', color: 'text-gray-600', bgColor: 'bg-gray-100', borderColor: 'border-gray-400' },
   checked_in: { label: 'Na fila', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
   in_progress: { label: 'Em atendimento', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
   attended: { label: 'Atendido', color: 'text-green-700', bgColor: 'bg-green-50', borderColor: 'border-green-200' },
