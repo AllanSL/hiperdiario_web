@@ -155,7 +155,7 @@ export function CustomSelect({
                         }
                     }
                 }
-                if (open) handleKeyDown(e);
+                handleKeyDown(e);
             }}
         >
             <div
@@ -183,7 +183,10 @@ export function CustomSelect({
                                 placeholder="Pesquisar..."
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                onKeyDown={handleKeyDown}
+                                onKeyDown={(e) => {
+                                    handleKeyDown(e);
+                                    e.stopPropagation();
+                                }}
                                 ref={inputRef}
                             />
                         </div>

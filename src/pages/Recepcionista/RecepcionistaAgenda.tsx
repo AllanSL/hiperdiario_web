@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { calculateDateTimeFromShift, getShiftFromHour, type ShiftType } from '../../lib/database.types';
 import { CnesService } from '../../lib/cnesService';
 import { AppointmentService } from '../../lib/appointmentService';
+import { formatCpf } from '../../lib/utils';
 
 type Professional = {
   user_id?: string;
@@ -49,15 +50,6 @@ type BlockedTime = {
     name: string;
     specialty: string;
   };
-};
-
-const formatCPF = (cpf: string) => {
-  if (!cpf) return '';
-  const cleaned = cpf.replace(/\D/g, '');
-  if (cleaned.length <= 3) return cleaned;
-  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)}.${cleaned.slice(3)}`;
-  if (cleaned.length <= 9) return `${cleaned.slice(0, 3)}.${cleaned.slice(3, 6)}.${cleaned.slice(6)}`;
-  return `${cleaned.slice(0, 3)}.${cleaned.slice(3, 6)}.${cleaned.slice(6, 9)}-${cleaned.slice(9, 11)}`;
 };
 
 const formatCapitalize = (str: string) => {
@@ -393,8 +385,8 @@ export default function RecepcionistaAgenda() {
 
   const handleSearchPatient = async () => {
     const cpfClean = patientSearch.replace(/\D/g, '');
-    if (!cpfClean || cpfClean.length < 8) {
-      showNotification('error', 'Informe um CPF válido para buscar o paciente.');
+    if (!cpfClean || cpfClean.length < 11) {
+      showNotification('error', 'Informe o CPF completo (11 dígitos) para buscar o paciente.');
       return;
     }
     setPatientLoading(true);
@@ -1281,18 +1273,23 @@ export default function RecepcionistaAgenda() {
                             <input
                               type="text"
                               value={patientSearch}
-                              onChange={(e) => setPatientSearch(formatCPF(e.target.value))}
+                              onChange={(e) => setPatientSearch(formatCpf(e.target.value))}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
-                                  handleSearchPatient();
+                                  if (!patientLoading && patientSearch.replace(/\D/g, '').length === 11) handleSearchPatient();
                                 }
                               }}
                               className="block w-full rounded-xl border border-gray-300 shadow-sm p-3 focus:border-green-500 focus:ring-green-500 bg-gray-50 text-base font-medium"
                               placeholder="000.000.000-00"
                               maxLength={14}
                             />
-                            <button type="button" onClick={handleSearchPatient} disabled={patientLoading} className="inline-flex items-center justify-center rounded-xl bg-gray-800 px-4 text-white hover:bg-black transition disabled:opacity-50">
+                            <button 
+                              type="button" 
+                              onClick={handleSearchPatient} 
+                              disabled={patientLoading || patientSearch.replace(/\D/g, '').length < 11} 
+                              className="inline-flex items-center justify-center rounded-xl bg-gray-800 px-4 text-white hover:bg-black transition disabled:opacity-50"
+                            >
                               <Search size={20} />
                             </button>
                           </div>

@@ -190,13 +190,28 @@ export class CnesService {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('[CnesService] Dados de profissionais recebidos:', data);
+                
+                let professionalsArray = [];
                 if (Array.isArray(data)) {
+                    professionalsArray = data;
+                } else if (data && Array.isArray(data.profissionais)) {
+                    professionalsArray = data.profissionais;
+                } else if (data && typeof data === 'object') {
+                    // Tentar encontrar qualquer array dentro do objeto caso a chave mude
+                    const potentialArray = Object.values(data).find(v => Array.isArray(v));
+                    if (potentialArray) professionalsArray = potentialArray as any[];
+                }
+
+                if (professionalsArray.length > 0) {
+                    console.log('[CnesService] Primeiro profissional (bruto):', professionalsArray[0]);
                     const profissionaisMap = new Map<string, CnesProfissional>();
 
-                    data.forEach((e: any) => {
-                        let cbo = (e.dsCbo || '').trim().toUpperCase();
-                        const nome = (e.name || '').trim();
-                        const cns = (e.cns || '').trim();
+                    professionalsArray.forEach((e: any) => {
+                        // Tentar vários campos comuns para nome, cns e cbo pois as chaves variam entre versões da API
+                        const nome = (e.nome || e.noProfissional || e.name || e.nomeProfissional || '').trim();
+                        const cns = (e.cns || e.coCns || e.nuCns || '').trim();
+                        let cbo = (e.dsCbo || e.dsCBO || e.ds_cbo || e.descricaoCbo || '').trim().toUpperCase();
 
                         if (!cbo || !nome || !cns) return;
 
@@ -204,6 +219,8 @@ export class CnesService {
                         if (
                             cbo.includes('MEDICO') ||
                             cbo.includes('MÉDICO') ||
+                            cbo.includes('ENFERMEIRO') ||
+                            cbo.includes('ENFERMAGEM') ||
                             cbo.includes('DENTISTA') ||
                             cbo.includes('ODONTOLOGO') ||
                             cbo.includes('PSICOLOGO') ||

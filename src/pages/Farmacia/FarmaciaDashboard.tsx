@@ -1,20 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock } from 'lucide-react';
+import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock, Loader2 } from 'lucide-react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { useNotification } from '../../contexts/NotificationContext';
 
-function formatCpf(cpf?: string | number | null) {
-    if (cpf === undefined || cpf === null) return '';
-    const s = String(cpf).replace(/\D/g, '');
-    if (!s) return '';
-    if (s.length <= 3) return s;
-    if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
-    if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
-    return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
+import { formatCpf } from '../../lib/utils';
 
 interface Medicine {
     id: string;
@@ -38,6 +30,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
     const [loading, setLoading] = useState(true);
     const { showNotification } = useNotification();
     const [updating, setUpdating] = useState<string | null>(null);
+    const [adjustments, setAdjustments] = useState<Record<string, string>>({});
 
     // Filters
     const [search, setSearch] = useState('');
@@ -65,9 +58,18 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
         fetchInventory();
     }, [cnes]);
 
-    const handleUpdateStock = async (med: Medicine, changeRaw: string) => {
-        if (!changeRaw || isNaN(Number(changeRaw))) return;
-        const quantity = Number(changeRaw);
+    const handleUpdateStock = async (med: Medicine, changeRaw: string, inputElement?: HTMLInputElement) => {
+        if (!changeRaw || changeRaw.trim() === '') {
+            if (inputElement) inputElement.focus();
+            return;
+        }
+        if (isNaN(Number(changeRaw))) return;
+        let quantity = Number(changeRaw);
+
+        // Auto-clamp values between -9999 and 9999
+        if (quantity < -9999) quantity = -9999;
+        if (quantity > 9999) quantity = 9999;
+
         setUpdating(med.id);
         try {
             const currentStock = inventory[med.id] || 0;
@@ -80,6 +82,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
 
             if (!error) {
                 setInventory(prev => ({ ...prev, [med.id]: newStock }));
+                setAdjustments(prev => ({ ...prev, [med.id]: '' }));
                 showNotification('success', 'Estoque atualizado com sucesso!');
             } else {
                 showNotification('error', 'Erro ao atualizar estoque: ' + error.message);
@@ -172,10 +175,34 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
                                                 {stock} <span className="text-xs font-normal text-gray-500 ml-1">{med.dispensing_unit}{stock > 1 ? 's' : ''}</span>
                                             </td>
                                             <td className="p-3">
-                                                <form onSubmit={(e) => { e.preventDefault(); const target = e.target as any; handleUpdateStock(med, target.elements.change.value); target.reset(); }} className="flex items-center gap-2">
-                                                    <input name="change" type="number" placeholder="Ex: 100 ou -10" disabled={updating === med.id} className="w-32 border border-gray-200 p-1.5 px-3 rounded-lg text-sm text-center outline-none focus:border-teal-500 bg-white" />
-                                                    <button type="submit" disabled={updating === med.id} className="bg-teal-100 hover:bg-teal-200 text-teal-700 px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50">
-                                                        {updating === med.id ? '...' : 'Salvar'}
+                                                <form onSubmit={(e) => { e.preventDefault(); handleUpdateStock(med, adjustments[med.id] || '', e.currentTarget.elements.namedItem('change') as HTMLInputElement); }} className="flex items-center gap-2">
+                                                    <input
+                                                        name="change"
+                                                        type="number"
+                                                        min="-9999"
+                                                        max="9999"
+                                                        value={adjustments[med.id] || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === '') {
+                                                                setAdjustments(prev => ({ ...prev, [med.id]: '' }));
+                                                                return;
+                                                            }
+                                                            if (val === '-') {
+                                                                setAdjustments(prev => ({ ...prev, [med.id]: '-' }));
+                                                                return;
+                                                            }
+                                                            const num = Number(val);
+                                                            if (num >= -9999 && num <= 9999 && val.length <= 5) {
+                                                                setAdjustments(prev => ({ ...prev, [med.id]: val }));
+                                                            }
+                                                        }}
+                                                        placeholder="Ex: 100 ou -10"
+                                                        disabled={updating === med.id}
+                                                        className="w-32 border border-gray-200 bg-white p-1.5 px-3 rounded-lg text-sm text-center outline-none focus:border-teal-500 transition-all"
+                                                    />
+                                                    <button type="submit" disabled={updating === med.id} className="bg-teal-100 hover:bg-teal-200 text-teal-700 px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50 min-w-[70px] flex items-center justify-center">
+                                                        {updating === med.id ? <Loader2 size={16} className="animate-spin" /> : 'Salvar'}
                                                     </button>
                                                 </form>
                                             </td>
@@ -491,15 +518,28 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
 
         const times = [start];
         let freq = 0;
-        if (label === '12/12h') freq = 12;
-        else if (label === '8/8h') freq = 8;
-        else if (label === '6/6h') freq = 6;
-        else if (label === '4/4h') freq = 4;
+        let count = 1;
+        
+        const cleanLabel = label.toLowerCase();
+        
+        if (cleanLabel.includes('12/12h') || cleanLabel.includes('2x ao dia')) {
+            freq = 12;
+            count = 2;
+        } else if (cleanLabel.includes('8/8h') || cleanLabel.includes('3x ao dia')) {
+            freq = 8;
+            count = 3;
+        } else if (cleanLabel.includes('6/6h') || cleanLabel.includes('4x ao dia')) {
+            freq = 6;
+            count = 4;
+        } else if (cleanLabel.includes('4/4h') || cleanLabel.includes('6x ao dia')) {
+            freq = 4;
+            count = 6;
+        }
 
         if (freq > 0) {
-            for (let i = 1; i < (24 / freq); i++) {
+            for (let i = 1; i < count; i++) {
                 const nextDate = new Date(date.getTime() + freq * i * 3600000);
-                times.push(nextDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+                times.push(nextDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }));
             }
         }
         return times;
@@ -508,7 +548,12 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, id?: string }>({ isOpen: false });
 
     const searchPatient = async () => {
-        if (!searchCpf || !cnes) return;
+        const cleanCpf = searchCpf.replace(/\D/g, '');
+        if (cleanCpf.length < 11) {
+            showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar.');
+            return;
+        }
+        if (!cnes) return;
         setSearching(true);
         setPatient(null);
         setPatientMeds([]);
@@ -639,25 +684,30 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
             <div className="shrink-0 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 w-full max-w-lg">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Paciente (CPF)</label>
                 <form
-                    onSubmit={(e) => { e.preventDefault(); if (!searching && searchCpf) searchPatient(); }}
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!searching && searchCpf.replace(/\D/g, '').length === 11) searchPatient();
+                    }}
                     className="flex gap-2"
                 >
                     <input
                         type="text"
-                        inputMode='numeric'
-                        pattern='[0-9]*'
-                        maxLength={11}
-                        placeholder="Apenas números..."
-                        className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border"
-                        value={searchCpf}
-                        onChange={e => setSearchCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                        placeholder="000.000.000-00"
+                        className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border font-medium"
+                        value={formatCpf(searchCpf)}
+                        onChange={e => setSearchCpf(formatCpf(e.target.value))}
+                        maxLength={14}
                     />
                     <button
                         type="submit"
-                        disabled={searching || !searchCpf}
-                        className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                        disabled={searching || searchCpf.replace(/\D/g, '').length < 11}
+                        className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 min-w-[100px]"
                     >
-                        <Search size={18} /> {searching ? '...' : 'Buscar'}
+                        {searching ? <Loader2 size={18} className="animate-spin" /> : (
+                            <>
+                                <Search size={18} /> Buscar
+                            </>
+                        )}
                     </button>
                 </form>
             </div>
@@ -767,8 +817,6 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                     </p>
                                                     <div className="text-gray-500 text-xs mt-1 bg-gray-50 p-2 flex flex-col sm:flex-row gap-2 sm:items-center rounded border border-gray-100 md:w-max">
                                                         <span><strong>App Paciente:</strong> Restam {med.stock} un.</span>
-                                                        <div className="hidden sm:block w-px h-3 bg-gray-300"></div>
-                                                        <span><strong>Histórico Original:</strong> Retirada de {oDisp.dispensed_quantity} un. em {new Date(oDisp.dispensed_at).toLocaleDateString('pt-BR')}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -780,11 +828,19 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                     onClick={() => {
                                                         setEditingMed(med.id);
                                                         setEditQuantity(med.stock || 0);
-                                                        setEditFrequencyLabel(oDisp.frequency_label || '1x ao dia');
+                                                        
+                                                        // Tenta inferir a frequência se o label estiver vazio
+                                                        const freqCount = med.frequency?.length || 0;
+                                                        const inferredLabel = freqCount === 2 ? '12/12h' : 
+                                                                            freqCount === 3 ? '8/8h' : 
+                                                                            freqCount === 4 ? '6/6h' : 
+                                                                            freqCount === 6 ? '4/4h' : '1x ao dia';
+                                                                            
+                                                        setEditFrequencyLabel(oDisp.frequency_label || inferredLabel);
                                                         setEditStartTime(med.frequency?.[0] || '08:00');
                                                     }}
                                                     className="p-2 text-gray-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition"
-                                                    title="Editar Frequência/Saldo no App"
+                                                    title="Editar"
                                                 >
                                                     <Edit size={18} />
                                                 </button>
@@ -1006,7 +1062,11 @@ export default function FarmaciaDashboard() {
     }, [profile?.cnes]);
 
     const searchPatient = async () => {
-        if (!searchCpf) return;
+        const cleanCpf = searchCpf.replace(/\D/g, '');
+        if (cleanCpf.length < 11) {
+            showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar.');
+            return;
+        }
         setSearching(true);
         setPatient(null);
 
@@ -1288,26 +1348,22 @@ export default function FarmaciaDashboard() {
                                             <input
                                                 type="text"
                                                 inputMode='numeric'
-                                                pattern='[0-9]*'
-                                                maxLength={11}
-                                                placeholder="Apenas números..."
+                                                maxLength={14}
+                                                placeholder="000.000.000-00"
                                                 className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border"
                                                 value={searchCpf}
-                                                onChange={e => {
-                                                    const numericVal = e.target.value.replace(/\D/g, '').slice(0, 11);
-                                                    setSearchCpf(numericVal);
-                                                }}
+                                                onChange={e => setSearchCpf(formatCpf(e.target.value))}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
-                                                        if (!searching && searchCpf) searchPatient();
+                                                        if (!searching && searchCpf.replace(/\D/g, '').length === 11) searchPatient();
                                                     }
                                                 }}
                                             />
                                             <button
                                                 type="button"
                                                 onClick={searchPatient}
-                                                disabled={searching || !searchCpf}
+                                                disabled={searching || searchCpf.replace(/\D/g, '').length < 11}
                                                 className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
                                             >
                                                 <Search size={18} /> {searching ? 'Buscando...' : 'Buscar'}
@@ -1485,9 +1541,9 @@ export default function FarmaciaDashboard() {
                                                 !isPrescriptionValid ||
                                                 Number(dispensedRaw) <= 0
                                             }
-                                            className="px-5 py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                            className="px-5 py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[180px] gap-2"
                                         >
-                                            {submitting ? 'Salvando...' : 'Confirmar Dispensação'}
+                                            {submitting ? <><Loader2 size={16} className="animate-spin" /> Salvando...</> : 'Confirmar Dispensação'}
                                         </button>
                                     </div>
                                 </form>

@@ -3,10 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import type { CnesEstabelecimento, CnesProfissional } from '../../lib/cnesService';
 import { CnesService } from '../../lib/cnesService';
-import { UserPlus, Search } from 'lucide-react';
+import { UserPlus, Search, Loader2 } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import ufsData from '../../lib/municipios.json';
 import { CustomSelect } from '../../components/CustomSelect';
+import { formatCpf, isValidCPF } from '../../lib/utils';
 
 export default function Register() {
     const [cpf, setCpf] = useState('');
@@ -33,41 +34,10 @@ export default function Register() {
 
     const navigate = useNavigate();
 
-    // --- CPF helpers: máscara, limitação e validação ---
     const onlyDigits = (v: string) => v.replace(/\D/g, '');
 
-    const formatCPF = (v: string) => {
-        const d = onlyDigits(v).slice(0, 11);
-        if (d.length <= 3) return d;
-        if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-        if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
-    };
-
-    const isValidCPF = (v: string) => {
-        const cpfNum = onlyDigits(v);
-        if (cpfNum.length !== 11) return false;
-        if (/^(\d)\1{10}$/.test(cpfNum)) return false; // rejeita sequências iguais
-
-        const nums = cpfNum.split('').map(n => parseInt(n, 10));
-
-        let sum = 0;
-        for (let i = 0; i < 9; i++) sum += nums[i] * (10 - i);
-        let rev = sum % 11;
-        const dig1 = rev < 2 ? 0 : 11 - rev;
-        if (dig1 !== nums[9]) return false;
-
-        sum = 0;
-        for (let i = 0; i < 10; i++) sum += nums[i] * (11 - i);
-        rev = sum % 11;
-        const dig2 = rev < 2 ? 0 : 11 - rev;
-        if (dig2 !== nums[10]) return false;
-
-        return true;
-    };
-
     const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setCpf(formatCPF(e.target.value));
+        setCpf(formatCpf(e.target.value));
         if (cpfError) setCpfError('');
     };
 
@@ -183,13 +153,18 @@ export default function Register() {
                 navigate('/');
             }
         } catch (err: any) {
-            if (err.message === 'User already registered') {
+            console.error('Erro no registro:', err);
+
+            if (err.code === '23505' || (err.message && err.message.includes('unique constraint'))) {
+                showNotification('error', 'Este profissional já está cadastrado no sistema (CNS ou CPF já existente).');
+            } else if (err.message === 'User already registered' || err.code === 'user_already_exists') {
                 showNotification('error', 'Este CPF já possui uma conta cadastrada.');
             } else {
                 showNotification('error', err.message || 'Erro ao registrar profissional.');
             }
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     return (
@@ -258,7 +233,7 @@ export default function Register() {
 
                         {estabelecimentos.length > 0 && (
                             <div className="w-full min-w-0">
-                                <label className="block text-sm font-medium text-gray-700 truncate">Selecione o Estabelecimento</label>
+                                <label className="block text-sm font-medium text-gray-700 truncate">Selecione a Unidade</label>
                                 <CustomSelect
                                     value={selectedEstabelecimento?.codigoCnes || ''}
                                     onChange={(val) => {
@@ -274,18 +249,36 @@ export default function Register() {
                             </div>
                         )}
 
+                        {loading && profissionais.length === 0 && selectedEstabelecimento && (
+                            <div className="flex items-center justify-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 animate-pulse">
+                                <div className="flex flex-col items-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mb-2"></div>
+                                    <p className="text-sm text-gray-600 font-medium">Buscando profissionais vinculados...</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {!loading && selectedEstabelecimento && profissionais.length === 0 && (
+                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                                <p className="text-amber-700 text-sm font-medium">
+                                    Não encontramos profissionais com perfis compatíveis (Médico, Enfermeiro, Farmacêutico ou Recepcionista) nesta unidade.
+                                    Por favor, verifique se selecionou a unidade correta.
+                                </p>
+                            </div>
+                        )}
+
                         {profissionais.length > 0 && (
-                            <div className="w-full min-w-0">
-                                <label className="block text-sm font-medium text-gray-700 truncate">Selecione o seu Perfil</label>
+                            <div className="w-full min-w-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <label className="block text-sm font-medium text-gray-700 truncate mb-1.5">Selecione o seu Perfil</label>
                                 <CustomSelect
-                                    value={selectedProfissional ? `${selectedProfissional.specialty} - ${selectedProfissional.name}` : ''}
+                                    value={selectedProfissional?.cns || ''}
                                     onChange={(val) => {
-                                        const prof = profissionais.find(p => `${p.specialty} - ${p.name}` === val);
+                                        const prof = profissionais.find(p => p.cns === val);
                                         if (prof) setSelectedProfissional(prof);
                                     }}
-                                    placeholder="Escolha"
+                                    placeholder="Escolha seu nome e especialidade"
                                     options={profissionais.map(prof => ({
-                                        value: `${prof.specialty} - ${prof.name}`,
+                                        value: prof.cns,
                                         label: `${prof.specialty} - ${prof.name}`
                                     }))}
                                 />
@@ -347,7 +340,12 @@ export default function Register() {
                             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                         >
                             <UserPlus className="w-5 h-5 mr-2" />
-                            {loading ? 'Cadastrando...' : 'Finalizar Cadastro'}
+                            {loading ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span>Cadastrando...</span>
+                                </div>
+                            ) : 'Finalizar Cadastro'}
                         </button>
                     </div>
 

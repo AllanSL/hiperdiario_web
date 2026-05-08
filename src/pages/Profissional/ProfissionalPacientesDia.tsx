@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { CnesService } from '../../lib/cnesService';
 import { ArrowLeft, CalendarCheck, User, Clock, Activity, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatCpf } from '../../lib/utils';
 
 export default function ProfissionalPacientesDia() {
     const { profile } = useAuth();
@@ -16,14 +17,6 @@ export default function ProfissionalPacientesDia() {
             fetchPacientesDoDia();
         }
     }, [profile]);
-
-    const formatCPF = (v: string) => {
-        const d = v.replace(/\D/g, '').slice(0, 11);
-        if (d.length <= 3) return d;
-        if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-        if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
-    };
 
     const fetchPacientesDoDia = async () => {
         try {
@@ -121,7 +114,7 @@ export default function ProfissionalPacientesDia() {
                                                         {apt.patients?.name || 'Paciente não identificado'}
                                                         {apt.patients?.cpf && (
                                                             <span className="ml-2 font-normal text-gray-500">
-                                                                (CPF: {formatCPF(apt.patients.cpf)})
+                                                                (CPF: {formatCpf(apt.patients.cpf)})
                                                             </span>
                                                         )}
                                                     </div>

@@ -3,7 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, Loader2 } from 'lucide-react';
+import { formatCpf, isValidCPF } from '../../lib/utils';
 
 export default function Login() {
     const [cpf, setCpf] = useState('');
@@ -24,11 +25,16 @@ export default function Login() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        const cleanCpf = cpf.replace(/\D/g, '');
+        if (cleanCpf.length < 11) {
+            showNotification('warning', 'Digite o CPF completo (11 dígitos) para entrar.');
+            return;
+        }
+
         setLoading(true);
 
-        // Assuming CPF format is numbers only and matches a custom email or identity in Supabase 
-        // This usually implies you either authenticate with a custom function or CPF@hiperdiario.app pattern
-        const emailFormat = `${cpf.replace(/\D/g, '')}@hiperdiario.web`;
+        const emailFormat = `${cleanCpf}@hiperdiario.web`;
 
         const { error } = await supabase.auth.signInWithPassword({
             email: emailFormat,
@@ -65,9 +71,10 @@ export default function Login() {
                                 type="text"
                                 required
                                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
-                                placeholder="CPF"
+                                placeholder="000.000.000-00"
                                 value={cpf}
-                                onChange={(e) => setCpf(e.target.value)}
+                                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                                maxLength={14}
                             />
                         </div>
                         <div>
@@ -93,7 +100,12 @@ export default function Login() {
                             <span className="absolute left-0 inset-y-0 flex items-center pl-3">
                                 <LogIn className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
                             </span>
-                            {loading ? 'Entrando...' : 'Entrar'}
+                            {loading ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span>Entrando...</span>
+                                </div>
+                            ) : 'Entrar'}
                         </button>
                     </div>
 

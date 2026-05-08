@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, AlertTriangle, Pill, X, Activity, History, User } from 'lucide-react';
+import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, AlertTriangle, Pill, X, Activity, History, User, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { STATUS_CONFIG } from '../../lib/database.types';
 import type { VitalSigns, ClinicalNote } from '../../lib/database.types';
 import { useNotification } from '../../contexts/NotificationContext';
+import { formatCpf } from '../../lib/utils';
 
 type Patient = { id: string; name: string; cpf: string; diseases?: string[]; remote_id?: string };
 type Medicine = { id: string; active_principle: string; strength: string; form: string; stock: number; dispensing_unit: string; frequency_label: string };
@@ -13,15 +14,6 @@ type Appointment = {
   id: string; date_time: string; status: string | null; shift?: string;
   checked_in_at?: string | null; notes?: string; patient_id?: string;
   patients?: Patient | Patient[];
-};
-
-const formatCPF = (cpf: string) => {
-  if (!cpf) return '';
-  const d = cpf.replace(/\D/g, '');
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
 };
 
 const getStatusConfig = (status: string | null, hasCheckedIn: boolean) => {
@@ -374,7 +366,7 @@ export default function ProfissionalAtendimentos() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-gray-600 text-sm font-medium">
-                      <p className="flex items-center gap-1"><User size={16} className="text-gray-500" /> CPF: {patient?.cpf ? formatCPF(patient.cpf) : '—'}</p>
+                      <p className="flex items-center gap-1"><User size={16} className="text-gray-500" /> CPF: {patient?.cpf ? formatCpf(patient.cpf) : '—'}</p>
                       <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                       <p className="flex items-center gap-1"><Clock size={16} className="text-gray-500" /> Turno: {selectedApt.shift === 'morning' ? 'MANHÃ' : 'TARDE'}</p>
                     </div>
@@ -572,9 +564,13 @@ export default function ProfissionalAtendimentos() {
                   <button
                     onClick={handleFinalize}
                     disabled={saving}
-                    className="flex items-center justify-center gap-2 bg-green-600 text-white px-10 py-3.5 rounded-xl font-bold text-sm hover:bg-green-700 transition-all shadow-xl shadow-green-100 disabled:opacity-50 active:scale-95 whitespace-nowrap"
+                    className="flex items-center justify-center gap-2 bg-green-600 text-white px-10 py-3.5 rounded-xl font-bold text-sm hover:bg-green-700 transition-all shadow-xl shadow-green-100 disabled:opacity-50 active:scale-95 whitespace-nowrap min-w-[280px]"
                   >
-                    {saving ? 'PROCESSANDO...' : (
+                    {saving ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> PROCESSANDO...
+                      </>
+                    ) : (
                       <>
                         <CheckCircle size={18} /> FINALIZAR ATENDIMENTO
                       </>

@@ -4,6 +4,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Edit, Search, Plus, X, ChevronDown, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatCpf } from '../../lib/utils';
 import { CnesService, type CnesEstabelecimento } from '../../lib/cnesService';
 import { CustomSelect } from '../../components/CustomSelect';
 import ufsData from '../../lib/municipios.json';
@@ -93,16 +94,6 @@ const defaultForm: PatientForm = {
   password: '',
 };
 
-function formatCpf(cpf?: string | number | null) {
-  if (cpf === undefined || cpf === null) return '';
-  const s = String(cpf).replace(/\D/g, '');
-  if (!s) return '';
-  if (s.length <= 3) return s;
-  if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
-  if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
-  return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
-
 function formatDateDisplay(dateString?: string | null) {
   if (!dateString) return 'Data n/i';
   try {
@@ -176,6 +167,14 @@ export default function RecepcionistaPacientes() {
 
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
+        const hasLetters = /[a-zA-Z]/.test(filterQuery);
+
+        if (numeric.length > 0 && !hasLetters && numeric.length < 11) {
+          showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar por CPF.');
+          setLoading(false);
+          return;
+        }
+
         if (numeric.length > 0) {
           query = query.or(`name.ilike.%${filterQuery}%,cpf.ilike.%${numeric}%`);
         } else {
@@ -503,7 +502,16 @@ export default function RecepcionistaPacientes() {
                   type="text"
                   placeholder="Nome ou CPF..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const onlyDigits = val.replace(/\D/g, '');
+                    const hasLetters = /[a-zA-Z]/.test(val);
+                    if (onlyDigits.length > 0 && !hasLetters) {
+                      setSearchQuery(formatCpf(val));
+                    } else {
+                      setSearchQuery(val);
+                    }
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && fetchPatients()}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-50 shadow-sm transition-all"
                 />

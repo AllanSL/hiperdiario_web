@@ -6,6 +6,8 @@ import { CnesService } from '../../lib/cnesService';
 import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { formatCpf } from '../../lib/utils';
+
 export default function ProfissionalAgenda() {
     const { profile } = useAuth();
     const navigate = useNavigate();
@@ -14,14 +16,6 @@ export default function ProfissionalAgenda() {
     const [loading, setLoading] = useState(true);
     const [ubsName, setUbsName] = useState('');
     const { showNotification } = useNotification();
-
-    const formatCPF = (v: string) => {
-        const d = v.replace(/\D/g, '').slice(0, 11);
-        if (d.length <= 3) return d;
-        if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-        if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-        return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
-    };
 
     const getShiftLabel = (shift: string | null) => {
         if (shift === 'morning') return 'Manhã';
@@ -427,7 +421,7 @@ export default function ProfissionalAgenda() {
                                                     <div className="flex items-center text-sm font-bold text-indigo-600">
                                                         <User className="mr-2 h-5 w-5 text-gray-400" />
                                                         {apt.patients?.name || 'Paciente não identificado'}
-                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {formatCPF(apt.patients.cpf)})</span>}
+                                                        {apt.patients?.cpf && <span className="ml-2 font-normal text-gray-500">(CPF: {formatCpf(apt.patients.cpf)})</span>}
                                                     </div>
                                                     <div>
                                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(apt.status)}`}>

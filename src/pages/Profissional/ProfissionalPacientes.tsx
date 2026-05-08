@@ -4,16 +4,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Search, X, Pill, AlertCircle, Check, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-function formatCpf(cpf?: string | number | null) {
-  if (cpf === undefined || cpf === null) return '';
-  const s = String(cpf).replace(/\D/g, '');
-  if (!s) return '';
-  if (s.length <= 3) return s;
-  if (s.length <= 6) return s.replace(/(\d{3})(\d+)/, '$1.$2');
-  if (s.length <= 9) return s.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
-  return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
+import { formatCpf } from '../../lib/utils';
 
 type Patient = {
   id: string;
@@ -83,6 +74,14 @@ export default function ProfissionalPacientes() {
 
       if (filterQuery) {
         const numeric = filterQuery.replace(/\D/g, '');
+        const hasLetters = /[a-zA-Z]/.test(filterQuery);
+
+        if (numeric.length > 0 && !hasLetters && numeric.length < 11) {
+          showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar por CPF.');
+          setLoading(false);
+          return;
+        }
+
         if (numeric.length > 0) {
           query = query.or(`name.ilike.%${filterQuery}%,cpf.ilike.%${numeric}%`);
         } else {
@@ -303,20 +302,13 @@ export default function ProfissionalPacientes() {
   };
 
   const formatSearchInput = (value: string) => {
-    // Remove caracteres não numéricos e não alfabéticos
-    let cleaned = value.replace(/[^\d\p{L}\s]/gu, '');
-
-    // Se for número (CPF), aplica máscara
-    if (/^\d+$/.test(value.replace(/\D/g, ''))) {
-      const numbers = value.replace(/\D/g, '').slice(0, 11);
-      if (numbers.length === 0) return '';
-      if (numbers.length <= 3) return numbers;
-      if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
-      if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
-      return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9)}`;
+    const onlyDigits = value.replace(/\D/g, '');
+    const hasLetters = /[a-zA-Z]/.test(value);
+    
+    if (onlyDigits.length > 0 && !hasLetters) {
+      return formatCpf(value);
     }
-
-    return cleaned;
+    return value;
   };
 
   return (

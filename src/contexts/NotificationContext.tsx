@@ -20,7 +20,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const showNotification = useCallback((type: NotificationType, message: string) => {
         const id = Math.random().toString(36).substring(2, 9);
-        setNotifications((prev) => [...prev, { id, type, message }]);
+        setNotifications((prev) => {
+            const newList = [...prev, { id, type, message }];
+            // Limit to max 3 notifications to avoid screen clutter
+            return newList.slice(-3);
+        });
 
         // Auto remove after 5 seconds
         setTimeout(() => {
