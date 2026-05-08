@@ -142,12 +142,36 @@ export default function RecepcionistaPacientes() {
   const [municipio, setMunicipio] = useState<number>(0);
   const [estabelecimentos, setEstabelecimentos] = useState<CnesEstabelecimento[]>([]);
   const [loadingUbs, setLoadingUbs] = useState(false);
+  const [unitName, setUnitName] = useState<string>('');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date());
 
   useEffect(() => {
-    fetchPatients();
-  }, [profile]);
+    if (profile?.user_id) {
+      fetchPatients();
+    }
+  }, [profile?.user_id]);
+
+  useEffect(() => {
+    const fetchUnitInfo = async () => {
+      if (!profile?.cnes) return;
+      try {
+        const { data } = await supabase
+          .from('cnes_establishments')
+          .select('name')
+          .eq('cnes_id', profile.cnes)
+          .maybeSingle();
+
+        if (data?.name) {
+          setUnitName(CnesService.formatCnesDisplayName(data.name));
+        }
+      } catch (err) {
+        console.error('Erro ao buscar nome da unidade:', err);
+      }
+    };
+
+    fetchUnitInfo();
+  }, [profile?.cnes]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -469,8 +493,8 @@ export default function RecepcionistaPacientes() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow px-6 py-4 flex items-center justify-between">
+    <div className="flex flex-col min-h-screen bg-gray-50 [scrollbar-gutter:stable]">
+      <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/recepcionista')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
             <ArrowLeft size={24} />
@@ -480,12 +504,29 @@ export default function RecepcionistaPacientes() {
             <p className="text-sm text-gray-500">Gerencie o cadastro de pacientes da unidade.</p>
           </div>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition shadow-lg shadow-green-100"
-        >
-          <Plus size={20} /> Cadastrar Paciente
-        </button>
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+            {unitName ? (
+              <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+            ) : (
+              profile?.cnes ? (
+                <span className="font-semibold text-gray-700">UBS CNES <span className="font-normal text-gray-400 ml-1">{profile.cnes}</span></span>
+              ) : 'Unidade não informada'
+            )}
+            <span className="text-xs font-medium text-blue-600">{profile?.name}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={fetchPatients} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-100">
+              <Calendar size={18} /> Atualizar Lista
+            </button>
+          </div>
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition shadow-lg shadow-green-100"
+          >
+            <Plus size={20} /> Cadastrar Paciente
+          </button>
+        </div>
       </nav>
 
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -504,12 +545,19 @@ export default function RecepcionistaPacientes() {
                   value={searchQuery}
                   onChange={(e) => {
                     const val = e.target.value;
-                    const onlyDigits = val.replace(/\D/g, '');
-                    const hasLetters = /[a-zA-Z]/.test(val);
-                    if (onlyDigits.length > 0 && !hasLetters) {
-                      setSearchQuery(formatCpf(val));
+                    if (!val) {
+                      setSearchQuery('');
+                      return;
+                    }
+                    const firstChar = val[0];
+                    if (/[0-9]/.test(firstChar)) {
+                      // Modo CPF
+                      const onlyDigits = val.replace(/\D/g, '');
+                      setSearchQuery(formatCpf(onlyDigits).slice(0, 14));
                     } else {
-                      setSearchQuery(val);
+                      // Modo Nome
+                      const onlyLetters = val.replace(/[0-9]/g, '');
+                      setSearchQuery(onlyLetters.slice(0, 30));
                     }
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && fetchPatients()}
@@ -590,7 +638,7 @@ export default function RecepcionistaPacientes() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-500">
             <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-xl font-bold text-gray-800">
-                {editing ? 'Editar Informações do Paciente' : 'Cadastro Completo de Paciente'}
+                {editing ? 'Editar Informações do Paciente' : 'Cadastro de Paciente'}
               </h3>
               <button onClick={resetForm} className="p-2 hover:bg-gray-200 rounded-full transition">
                 <X size={24} className="text-gray-500" />

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, UserCheck, CheckCircle, XCircle, Clock, AlertTriangle, Pill, X, Activity, History, User, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { STATUS_CONFIG } from '../../lib/database.types';
+import { CnesService } from '../../lib/cnesService';
 import type { VitalSigns, ClinicalNote } from '../../lib/database.types';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatCpf } from '../../lib/utils';
@@ -27,6 +28,7 @@ export default function ProfissionalAtendimentos() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [unitName, setUnitName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
 
@@ -79,6 +81,14 @@ export default function ProfissionalAtendimentos() {
     try {
       setLoading(true);
       const hoje = new Date().toLocaleDateString('en-CA');
+
+      if (profile?.cnes) {
+        const { data: ubsData } = await supabase.from('cnes_establishments').select('name').eq('cnes_id', profile.cnes).single();
+        if (ubsData) {
+          setUnitName(CnesService.formatCnesDisplayName(ubsData.name));
+        }
+      }
+
       const { data, error } = await supabase
         .from('appointments')
         .select('id, date_time, status, shift, checked_in_at, notes, patient_id, patients ( id, name, cpf, diseases )')
@@ -312,17 +322,31 @@ export default function ProfissionalAtendimentos() {
 
   return (
     <div className="min-h-screen bg-gray-100 pb-12">
-      <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm px-6 py-4 flex items-center justify-between">
+      <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/profissional')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition"><ArrowLeft size={24} /></button>
+          <button onClick={() => navigate('/profissional')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
+            <ArrowLeft size={24} />
+          </button>
           <div>
-            <h1 className="text-xl font-black text-gray-800 tracking-tight">FILA DE ATENDIMENTO</h1>
-            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <h1 className="text-xl font-bold text-gray-800">Fila de Atendimento</h1>
+            <p className="text-sm text-gray-500">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           </div>
         </div>
-        <button onClick={fetchAppointments} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-100">
-          <UserCheck size={18} /> ATUALIZAR FILA
-        </button>
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+            {unitName ? (
+              <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+            ) : (
+              profile?.cnes ? (
+                <span className="font-semibold text-gray-700">UBS CNES <span className="font-normal text-gray-400 ml-1">{profile.cnes}</span></span>
+              ) : 'Unidade não informada'
+            )}
+            <span className="text-xs font-medium text-green-600">{profile?.name} • {profile?.specialty}</span>
+          </div>
+          <button onClick={fetchAppointments} className="flex items-center gap-2 bg-green-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-green-700 transition shadow-lg shadow-green-100">
+            <UserCheck size={18} /> Atualizar Fila
+          </button>
+        </div>
       </nav>
 
       <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6">

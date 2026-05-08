@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock, Loader2 } from 'lucide-react';
+import { LogOut, Pill, ClipboardList, Search, Plus, Calendar, AlertCircle, X, CheckCircle, PackageSearch, History, Users, RotateCcw, Edit, Trash2, Home, TrendingDown, Clock, Loader2, UserCheck } from 'lucide-react';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { useNotification } from '../../contexts/NotificationContext';
 
 import { formatCpf } from '../../lib/utils';
+import { CnesService } from '../../lib/cnesService';
 
 interface Medicine {
     id: string;
@@ -108,7 +109,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
     });
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col flex-1 min-h-0 w-full">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="p-3 bg-teal-50 text-teal-600 rounded-lg"><PackageSearch size={24} /></div>
@@ -522,16 +523,16 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         
         const cleanLabel = label.toLowerCase();
         
-        if (cleanLabel.includes('12/12h') || cleanLabel.includes('2x ao dia')) {
+        if (cleanLabel.includes('12/12h') || cleanLabel.includes('2x ao dia') || cleanLabel.includes('2x dia')) {
             freq = 12;
             count = 2;
-        } else if (cleanLabel.includes('8/8h') || cleanLabel.includes('3x ao dia')) {
+        } else if (cleanLabel.includes('8/8h') || cleanLabel.includes('3x ao dia') || cleanLabel.includes('3x dia')) {
             freq = 8;
             count = 3;
-        } else if (cleanLabel.includes('6/6h') || cleanLabel.includes('4x ao dia')) {
+        } else if (cleanLabel.includes('6/6h') || cleanLabel.includes('4x ao dia') || cleanLabel.includes('4x dia')) {
             freq = 6;
             count = 4;
-        } else if (cleanLabel.includes('4/4h') || cleanLabel.includes('6x ao dia')) {
+        } else if (cleanLabel.includes('4/4h') || cleanLabel.includes('6x ao dia') || cleanLabel.includes('6x dia')) {
             freq = 4;
             count = 6;
         }
@@ -682,25 +683,40 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
             </div>
 
             <div className="shrink-0 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 w-full max-w-lg">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Paciente (CPF)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Paciente (Nome ou CPF)</label>
                 <form
                     onSubmit={(e) => {
                         e.preventDefault();
-                        if (!searching && searchCpf.replace(/\D/g, '').length === 11) searchPatient();
+                        if (!searching) searchPatient();
                     }}
                     className="flex gap-2"
                 >
                     <input
                         type="text"
-                        placeholder="000.000.000-00"
+                        placeholder="Nome ou CPF..."
                         className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border font-medium"
-                        value={formatCpf(searchCpf)}
-                        onChange={e => setSearchCpf(formatCpf(e.target.value))}
-                        maxLength={14}
+                        value={searchCpf}
+                        onChange={e => {
+                            const val = e.target.value;
+                            if (!val) {
+                                setSearchCpf('');
+                                return;
+                            }
+                            const firstChar = val[0];
+                            if (/[0-9]/.test(firstChar)) {
+                                // Modo CPF
+                                const onlyDigits = val.replace(/\D/g, '');
+                                setSearchCpf(formatCpf(onlyDigits).slice(0, 14));
+                            } else {
+                                // Modo Nome
+                                const onlyLetters = val.replace(/[0-9]/g, '');
+                                setSearchCpf(onlyLetters.slice(0, 30));
+                            }
+                        }}
                     />
                     <button
                         type="submit"
-                        disabled={searching || searchCpf.replace(/\D/g, '').length < 11}
+                        disabled={searching || !searchCpf}
                         className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 min-w-[100px]"
                     >
                         {searching ? <Loader2 size={18} className="animate-spin" /> : (
@@ -815,8 +831,8 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                             </span>
                                                         )}
                                                     </p>
-                                                    <div className="text-gray-500 text-xs mt-1 bg-gray-50 p-2 flex flex-col sm:flex-row gap-2 sm:items-center rounded border border-gray-100 md:w-max">
-                                                        <span><strong>App Paciente:</strong> Restam {med.stock} un.</span>
+                                                    <div className="text-gray-500 text-xs mt-1">
+                                                        <span>Restam {med.stock} un. em estoque.</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1035,7 +1051,6 @@ export default function FarmaciaDashboard() {
         setSearchCpf('');
         setPatient(null);
         setSearching(false);
-        setSearching(false);
         setSelectedPrinciple('');
         setSelectedStrength('');
         setUsageFrequency('');
@@ -1052,42 +1067,70 @@ export default function FarmaciaDashboard() {
         };
         fetchMedicines();
 
-        if (profile?.cnes) {
-            const fetchUbsName = async () => {
-                const { data } = await supabase.from('cnes_establishments').select('name').eq('cnes_id', profile.cnes).single();
-                if (data) setUbsName(data.name);
-            };
-            fetchUbsName();
-        }
+        const fetchUbsName = async () => {
+            if (!profile?.cnes) return;
+            try {
+                const { data } = await supabase
+                    .from('cnes_establishments')
+                    .select('name')
+                    .eq('cnes_id', profile.cnes)
+                    .maybeSingle();
+                
+                if (data?.name) {
+                    setUbsName(CnesService.formatCnesDisplayName(data.name));
+                }
+            } catch (err) {
+                console.error('Erro ao buscar nome da unidade:', err);
+            }
+        };
+
+        fetchUbsName();
     }, [profile?.cnes]);
 
     const searchPatient = async () => {
-        const cleanCpf = searchCpf.replace(/\D/g, '');
-        if (cleanCpf.length < 11) {
-            showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar.');
+        const queryStr = searchCpf.trim();
+        if (!queryStr) return;
+
+        const onlyDigits = queryStr.replace(/\D/g, '');
+        const hasLetters = /[a-zA-Z]/.test(queryStr);
+
+        if (onlyDigits.length > 0 && !hasLetters && onlyDigits.length < 11) {
+            showNotification('warning', 'Digite o CPF completo (11 dígitos) para buscar por CPF.');
             return;
         }
+
         setSearching(true);
         setPatient(null);
 
         try {
-            const { data, error } = await supabase
-                .from('patients')
-                .select('id, cpf, name, diseases')
-                .eq('cpf', searchCpf.replace(/\D/g, '')) // Limpa CPF
-                .single();
+            let query = supabase.from('patients').select('id, cpf, name, diseases');
 
-            if (error || !data) {
-                showNotification('error', 'Paciente não encontrado. Verifique o CPF.');
+            if (onlyDigits.length > 0 && !hasLetters) {
+                query = query.eq('cpf', onlyDigits);
             } else {
-                setPatient({
-                    id: data.id,
-                    cpf: data.cpf,
-                    name: data.name,
-                    conditions: data.diseases || []
-                });
+                query = query.ilike('name', `%${queryStr}%`);
             }
-        } catch (err) {
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
+                showNotification('error', 'Paciente não encontrado.');
+            } else if (data.length > 1) {
+                showNotification('info', 'Múltiplos pacientes encontrados. Tente ser mais específico ou use o CPF.');
+            } else {
+                const p = data[0];
+                setPatient({
+                    id: p.id,
+                    cpf: p.cpf,
+                    name: p.name,
+                    diseases: Array.isArray(p.diseases) ? p.diseases : []
+                });
+                fetchPatientMeds(p.id);
+            }
+        } catch (err: any) {
+            console.error('Erro ao buscar paciente:', err);
             showNotification('error', 'Erro ao buscar paciente.');
         } finally {
             setSearching(false);
@@ -1135,10 +1178,10 @@ export default function FarmaciaDashboard() {
     const handleFrequencyChange = (freq: string) => {
         setUsageFrequency(freq);
         let dailyQty = 0;
-        if (freq === '1x ao dia') dailyQty = 1;
-        else if (freq === '12/12h') dailyQty = 2;
-        else if (freq === '8/8h') dailyQty = 3;
-        else if (freq === '6/6h') dailyQty = 4;
+        if (freq.includes('1x ao dia') || freq.includes('1x dia')) dailyQty = 1;
+        else if (freq.includes('12/12h') || freq.includes('2x')) dailyQty = 2;
+        else if (freq.includes('8/8h') || freq.includes('3x')) dailyQty = 3;
+        else if (freq.includes('6/6h') || freq.includes('4x')) dailyQty = 4;
 
         if (dailyQty > 0) {
             setDispensedRaw((dailyQty * 30).toString());
@@ -1149,10 +1192,11 @@ export default function FarmaciaDashboard() {
 
     // Computa a frequência numérica com base no label selecionado
     const computedFrequencyPerDay = useMemo(() => {
-        if (usageFrequency === '1x ao dia') return 1;
-        if (usageFrequency === '12/12h') return 2;
-        if (usageFrequency === '8/8h') return 3;
-        if (usageFrequency === '6/6h') return 4;
+        const freq = usageFrequency.toLowerCase();
+        if (freq.includes('1x ao dia') || freq.includes('1x dia')) return 1;
+        if (freq.includes('12/12h') || freq.includes('2x')) return 2;
+        if (freq.includes('8/8h') || freq.includes('3x')) return 3;
+        if (freq.includes('6/6h') || freq.includes('4x')) return 4;
         if (usageFrequency === 'Outro' && dispensedRaw) {
             // Estima com base na quantidade mensal (ex: 90 / 30 = 3)
             const qty = parseInt(dispensedRaw) || 0;
@@ -1244,31 +1288,53 @@ export default function FarmaciaDashboard() {
     };
 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-100">
-            <nav className="bg-white shadow px-6 py-4 flex justify-between items-center shrink-0">
+        <div className="flex flex-col min-h-screen bg-gray-100 [scrollbar-gutter:stable]">
+            <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                 <div className="flex items-center gap-3">
-                    <Pill className="text-teal-600" size={28} />
-                    <h1 className="text-xl font-bold text-gray-800">Painel da Farmácia</h1>
+                    <div className="p-2 bg-teal-50 rounded-lg text-teal-600">
+                        <Pill size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-800">Painel da Farmácia</h1>
+                        <p className="text-sm text-gray-500">Controle de estoque e dispensação de medicamentos.</p>
+                    </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium hidden sm:inline">{profile?.name}</span>
-                    <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer text-sm font-medium">
-                        <LogOut size={18} /> Sair
-                    </button>
+                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                    <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+                        {ubsName ? (
+                            <span className="font-semibold text-gray-700">{ubsName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+                        ) : (
+                            profile?.cnes ? (
+                                <span className="font-semibold text-gray-700">Unidade <span className="font-normal text-gray-400 ml-1">CNES {profile.cnes}</span></span>
+                            ) : 'Unidade não informada'
+                        )}
+                        <span className="text-xs font-medium text-teal-600">{profile?.name}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => window.location.reload()} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-white hover:bg-teal-700 transition font-bold text-xs shadow-lg shadow-teal-100">
+                            <UserCheck size={16} /> Atualizar
+                        </button>
+                        <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer text-sm font-bold">
+                            <LogOut size={18} /> Sair
+                        </button>
+                    </div>
                 </div>
             </nav>
 
-            <main className="flex-1 w-full max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex flex-col min-h-0">
-                <div className="mb-8 flex justify-between items-center shrink-0">
+            <main className="flex-1 w-full max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex flex-col min-h-0">
+                <div className="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">Dispensação e Estoque</h2>
-                        <p className="mt-1 text-sm text-gray-500">
-                            {ubsName ? `${ubsName} - ` : ''}{profile?.cnes || 'N/D'}
+                        <p className="text-sm text-gray-500 font-medium">
+                            {ubsName || (profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não identificada')}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                            Gerencie o fluxo de medicamentos da unidade em tempo real.
                         </p>
                     </div>
                     <button
                         onClick={() => setIsModalOpen(true)}
-                        className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg shadow flex items-center gap-2 font-medium transition"
+                        className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-teal-100 flex items-center justify-center gap-2 font-bold transition"
                     >
                         <Plus size={20} /> Nova Dispensação
                     </button>
@@ -1307,7 +1373,7 @@ export default function FarmaciaDashboard() {
                     </button>
                 </div>
 
-                <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 flex flex-col min-h-0 w-full">
                     {activeTab === 'inicio' && (
                         <FarmaciaResumoDashboard cnes={profile?.cnes || ''} catalogSize={medicines.length} />
                     )}
@@ -1347,7 +1413,6 @@ export default function FarmaciaDashboard() {
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
-                                                inputMode='numeric'
                                                 maxLength={14}
                                                 placeholder="000.000.000-00"
                                                 className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 px-3 py-2 border"

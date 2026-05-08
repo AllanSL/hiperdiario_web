@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
+import { CnesService } from '../../lib/cnesService';
 
-import { ArrowLeft, Users, ChevronDown, UserCheck } from 'lucide-react';
+import { ArrowLeft, Users, ChevronDown, UserCheck, Search } from 'lucide-react';
 
 type ProfessionalSummary = {
   cns: string;
@@ -84,75 +85,18 @@ export default function RecepcionistaResumoUBS() {
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
   const [selectedProfessionalCns, setSelectedProfessionalCns] = useState<string>('');
   const [isProfessionalDropdownOpen, setIsProfessionalDropdownOpen] = useState(false);
+  const [unitName, setUnitName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
   const professionalDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const fetchResumo = async () => {
-      if (!profile?.cnes) {
-        showNotification('error', 'Unidade não está vinculada ao perfil.');
-        setLoading(false);
-        return;
-      }
+  const fetchResumo = useCallback(async () => {
+    if (!profile?.cnes) {
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      try {
-        const [professionalsResponse, appointmentsResponse] = await Promise.all([
-          supabase
-            .from('professionals')
-            .select('cns, user_id, name, specialty, crm_crf, role')
-            .eq('cnes', profile.cnes)
-            .order('name', { ascending: true }),
-          supabase
-            .from('appointments')
-            .select(`
-              *,
-              patients ( name, cpf ),
-              professionals ( name, specialty )
-            `)
-            .eq('cnes_id', profile.cnes)
-            .gte('date_time', startOfDay.toISOString())
-            .lte('date_time', endOfDay.toISOString())
-            .order('date_time', { ascending: true }),
-        ]);
-
-        if (professionalsResponse.error) throw professionalsResponse.error;
-        if (appointmentsResponse.error) throw appointmentsResponse.error;
-
-        // Filtro de ocupações de saúde
-        const healthKeywords = ['MEDICO', 'MÉDICO', 'DENTISTA', 'PSICOLOGO', 'PSICÓLOGO', 'NUTRICIONISTA', 'PSIQUIATRA', 'GINECOLOGISTA', 'FISIOTERAPEUTA'];
-        const isHealthProf = (specialty: string) => {
-          const upper = specialty.toUpperCase();
-          return healthKeywords.some(key => upper.includes(key));
-        };
-
-        const filteredProfs = (professionalsResponse.data || []).filter((p: any) => isHealthProf(p.specialty || ''));
-        setProfessionals(filteredProfs as ProfessionalSummary[]);
-        setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
-      } catch (err: any) {
-        console.error('Erro ao carregar resumo do dia:', err);
-        showNotification('error', err.message || 'Erro ao carregar dados da UBS.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResumo();
-  }, [profile]);
-
-
-
-
-
-  const fetchResumo = async () => {
-    if (!profile?.cnes) return;
+    setLoading(true);
     const today = new Date();
     const startOfDay = new Date(today);
     startOfDay.setHours(0, 0, 0, 0);
@@ -160,24 +104,70 @@ export default function RecepcionistaResumoUBS() {
     endOfDay.setHours(23, 59, 59, 999);
 
     try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          *, 
-          patients ( name, cpf ),
-          professionals ( name, specialty )
-        `)
-        .eq('cnes_id', profile.cnes)
-        .gte('date_time', startOfDay.toISOString())
-        .lte('date_time', endOfDay.toISOString())
-        .order('date_time', { ascending: true });
+      const [professionalsResponse, appointmentsResponse] = await Promise.all([
+        supabase
+          .from('professionals')
+          .select('cns, user_id, name, specialty, crm_crf, role')
+          .eq('cnes', profile.cnes)
+          .order('name', { ascending: true }),
+        supabase
+          .from('appointments')
+          .select(`
+            *,
+            patients ( name, cpf ),
+            professionals ( name, specialty )
+          `)
+          .eq('cnes_id', profile.cnes)
+          .gte('date_time', startOfDay.toISOString())
+          .lte('date_time', endOfDay.toISOString())
+          .order('date_time', { ascending: true }),
+      ]);
 
-      if (error) throw error;
-      setAppointments((data || []) as AppointmentSummary[]);
+      if (professionalsResponse.error) throw professionalsResponse.error;
+      if (appointmentsResponse.error) throw appointmentsResponse.error;
+
+      // Filtro de ocupações de saúde
+      const healthKeywords = ['MEDICO', 'MÉDICO', 'DENTISTA', 'PSICOLOGO', 'PSICÓLOGO', 'NUTRICIONISTA', 'PSIQUIATRA', 'GINECOLOGISTA', 'FISIOTERAPEUTA'];
+      const isHealthProf = (specialty: string) => {
+        const upper = specialty.toUpperCase();
+        return healthKeywords.some(key => upper.includes(key));
+      };
+
+      const filteredProfs = (professionalsResponse.data || []).filter((p: any) => isHealthProf(p.specialty || ''));
+      setProfessionals(filteredProfs as ProfessionalSummary[]);
+      setAppointments((appointmentsResponse.data || []) as AppointmentSummary[]);
     } catch (err: any) {
-      console.error('Erro ao recarregar consultas:', err);
+      console.error('Erro ao carregar resumo do dia:', err);
+      showNotification('error', err.message || 'Erro ao carregar dados da UBS.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [profile?.cnes, showNotification]);
+
+  useEffect(() => {
+    fetchResumo();
+  }, [fetchResumo]);
+
+  useEffect(() => {
+    const fetchUnitInfo = async () => {
+      if (!profile?.cnes) return;
+      try {
+        const { data } = await supabase
+          .from('cnes_establishments')
+          .select('name')
+          .eq('cnes_id', profile.cnes)
+          .maybeSingle();
+
+        if (data?.name) {
+          setUnitName(CnesService.formatCnesDisplayName(data.name));
+        }
+      } catch (err) {
+        console.error('Erro ao buscar nome da unidade:', err);
+      }
+    };
+
+    fetchUnitInfo();
+  }, [profile?.cnes]);
 
   const handleCheckIn = async (aptId: string) => {
     try {
@@ -223,8 +213,8 @@ export default function RecepcionistaResumoUBS() {
   const missedCount = filteredAppointments.filter((apt) => getStatusLabel(apt.status, apt.date_time, apt.shift).label === 'Faltou').length;
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow px-6 py-4 flex items-center justify-between">
+    <div className="flex flex-col min-h-screen bg-gray-100 [scrollbar-gutter:stable]">
+      <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/recepcionista')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
             <ArrowLeft size={24} />
@@ -234,12 +224,20 @@ export default function RecepcionistaResumoUBS() {
             <p className="text-sm text-gray-500">Visão de funcionamento, consultas de hoje e profissionais da unidade.</p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-gray-700">
-          {/* Exibir dia e horário de funcionamento da unidade */}
-          {/* <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-blue-700 font-semibold">
-            <Clock3 className="h-4 w-4" />
-            {horariosLoading ? 'Carregando...' : getTodayHorarioLabel(horariosUbs)}
-          </div> */}
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+            {unitName ? (
+              <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+            ) : (
+              profile?.cnes ? (
+                <span className="font-semibold text-gray-700">UBS CNES <span className="font-normal text-gray-400 ml-1">{profile.cnes}</span></span>
+              ) : 'Unidade não informada'
+            )}
+            <span className="text-xs font-medium text-blue-600">{profile?.name}</span>
+          </div>
+          <button onClick={fetchResumo} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-100">
+            <UserCheck size={18} /> Atualizar Resumo
+          </button>
         </div>
       </nav>
 

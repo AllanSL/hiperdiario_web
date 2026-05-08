@@ -200,14 +200,14 @@ export default function RecepcionistaAgenda() {
     } finally {
       setLoading(false);
     }
-  }, [profile, currentMonth]);
+  }, [profile?.cnes, currentMonth]);
 
 
   useEffect(() => {
     if (profile?.cnes) {
       fetchData();
     }
-  }, [profile, currentMonth, fetchData]);
+  }, [profile?.cnes, currentMonth, fetchData]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -619,7 +619,7 @@ export default function RecepcionistaAgenda() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow px-6 py-4 flex items-center justify-between">
+      <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/recepcionista')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
             <ArrowLeft size={24} />
@@ -629,16 +629,19 @@ export default function RecepcionistaAgenda() {
             <p className="text-sm text-gray-500">Visualize todas as consultas da unidade e gerencie bloqueios.</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-          <div className="text-right text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
             {unitName ? (
               <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
             ) : (
-              profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não informada'
+              profile?.cnes ? (
+                <span className="font-semibold text-gray-700">Unidade <span className="font-normal text-gray-400 ml-1">CNES {profile.cnes}</span></span>
+              ) : 'Unidade não informada'
             )}
+            <span className="text-xs font-medium text-blue-600">{profile?.name}</span>
           </div>
-          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 transition font-bold text-sm shadow-sm">
-            <Search size={16} /> Atualizar
+          <button onClick={fetchData} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-100">
+            <UserCheck size={18} /> Atualizar Agenda
           </button>
         </div>
       </nav>

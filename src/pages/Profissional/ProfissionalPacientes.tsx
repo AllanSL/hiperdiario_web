@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
+import { CnesService } from '../../lib/cnesService';
 import { ArrowLeft, Search, X, Pill, AlertCircle, Check, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatCpf } from '../../lib/utils';
@@ -50,6 +51,7 @@ export default function ProfissionalPacientes() {
   const [clinicalNotes, setClinicalNotes] = useState<Record<string, any[]>>({});
   const [notesLoading, setNotesLoading] = useState<Set<string>>(new Set());
   const { showNotification } = useNotification();
+  const [unitName, setUnitName] = useState<string>('');
   const [expandedPatient, setExpandedPatient] = useState<string | null>(null);
   const [editingDiseases, setEditingDiseases] = useState<string | null>(null);
   const [selectedDiseases, setSelectedDiseases] = useState<string[]>([]);
@@ -63,6 +65,27 @@ export default function ProfissionalPacientes() {
     lastProfileIdRef.current = profile.user_id;
     fetchPatients();
   }, [profile?.user_id]);
+
+  useEffect(() => {
+    const fetchUnitInfo = async () => {
+      if (!profile?.cnes) return;
+      try {
+        const { data } = await supabase
+          .from('cnes_establishments')
+          .select('name')
+          .eq('cnes_id', profile.cnes)
+          .maybeSingle();
+
+        if (data?.name) {
+          setUnitName(CnesService.formatCnesDisplayName(data.name));
+        }
+      } catch (err) {
+        console.error('Erro ao buscar nome da unidade:', err);
+      }
+    };
+
+    fetchUnitInfo();
+  }, [profile?.cnes]);
 
 
 
@@ -302,18 +325,22 @@ export default function ProfissionalPacientes() {
   };
 
   const formatSearchInput = (value: string) => {
-    const onlyDigits = value.replace(/\D/g, '');
-    const hasLetters = /[a-zA-Z]/.test(value);
-    
-    if (onlyDigits.length > 0 && !hasLetters) {
-      return formatCpf(value);
+    if (!value) return '';
+    const firstChar = value[0];
+    if (/[0-9]/.test(firstChar)) {
+      // Modo CPF
+      const onlyDigits = value.replace(/\D/g, '');
+      return formatCpf(onlyDigits).slice(0, 14);
+    } else {
+      // Modo Nome
+      const onlyLetters = value.replace(/[0-9]/g, '');
+      return onlyLetters.slice(0, 30);
     }
-    return value;
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow px-6 py-4 flex items-center justify-between">
+    <div className="flex flex-col min-h-screen bg-gray-100 [scrollbar-gutter:stable]">
+      <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/profissional')} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
             <ArrowLeft size={24} />
@@ -323,9 +350,24 @@ export default function ProfissionalPacientes() {
             <p className="text-sm text-gray-500">Visualize e edite as condições/doenças dos pacientes.</p>
           </div>
         </div>
+        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+          <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+            {unitName ? (
+              <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+            ) : (
+              profile?.cnes ? (
+                <span className="font-semibold text-gray-700">UBS CNES <span className="font-normal text-gray-400 ml-1">{profile.cnes}</span></span>
+              ) : 'Unidade não informada'
+            )}
+            <span className="text-xs font-medium text-green-600">{profile?.name} • {profile?.specialty}</span>
+          </div>
+          <button onClick={fetchPatients} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-white hover:bg-green-700 transition font-bold text-sm shadow-lg shadow-green-100">
+            <Activity size={18} /> Atualizar Lista
+          </button>
+        </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 w-full flex-grow">
 
 
         <section className="bg-white shadow rounded-lg p-6">

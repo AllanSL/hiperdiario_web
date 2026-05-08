@@ -3,11 +3,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { LogOut, Activity, Calendar, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { CnesService } from '../../lib/cnesService';
 
 export default function ProfissionalDashboard() {
     const { profile } = useAuth();
     const navigate = useNavigate();
     const [stats, setStats] = useState({ total: 0, naFila: 0, emAtendimento: 0, atendidos: 0 });
+    const [unitName, setUnitName] = useState<string>('');
     const [loading, setLoading] = useState(true);
 
     const handleLogout = () => supabase.auth.signOut();
@@ -20,6 +22,13 @@ export default function ProfissionalDashboard() {
         try {
             setLoading(true);
             const hoje = new Date().toLocaleDateString('en-CA');
+
+            if (profile?.cnes) {
+                const { data: ubsData } = await supabase.from('cnes_establishments').select('name').eq('cnes_id', profile.cnes).single();
+                if (ubsData) {
+                    setUnitName(CnesService.formatCnesDisplayName(ubsData.name));
+                }
+            }
 
             const { data, error } = await supabase
                 .from('appointments')
@@ -45,18 +54,33 @@ export default function ProfissionalDashboard() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
-                <h1 className="text-xl font-bold text-gray-800">Painel do Profissional de Saúde</h1>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium">{profile?.name}</span>
-                    <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer">
+        <div className="flex flex-col min-h-screen bg-gray-100 [scrollbar-gutter:stable]">
+            <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                        <Activity size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-800">Painel do Profissional</h1>
+                        <p className="text-sm text-gray-500">Gestão de atendimentos e histórico clínico.</p>
+                    </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                    <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+                        {unitName ? (
+                            <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+                        ) : (
+                            profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não informada'
+                        )}
+                        <span className="text-xs font-medium text-green-600">{profile?.name} • {profile?.specialty}</span>
+                    </div>
+                    <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer font-bold text-sm">
                         <LogOut size={18} /> Sair
                     </button>
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 w-full flex-grow">
                 {loading ? (
                     <div className="flex justify-center items-center py-10">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>

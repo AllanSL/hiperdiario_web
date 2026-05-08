@@ -41,7 +41,7 @@ export default function ProfissionalAgenda() {
         if (profile?.user_id) {
             fetchAgendaParaOMes(currentMonth);
         }
-    }, [profile, currentMonth]);
+    }, [profile?.user_id, currentMonth]);
 
     useEffect(() => {
         if (!profile?.cnes) return;
@@ -283,13 +283,25 @@ export default function ProfissionalAgenda() {
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-100">
-            <nav className="bg-white shadow px-6 py-4 flex items-center">
-                <button onClick={() => navigate(-1)} className="mr-4 p-2 text-gray-600 hover:text-green-600 hover:bg-gray-100 rounded-full transition">
-                    <ArrowLeft size={24} />
-                </button>
+            <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                 <div className="flex items-center gap-3">
-                    <Calendar className="text-green-500 h-6 w-6" />
-                    <h1 className="text-xl font-bold text-gray-800">Minha Agenda</h1>
+                    <button onClick={() => navigate(-1)} className="p-2 rounded-full text-gray-600 hover:bg-gray-100 transition">
+                        <ArrowLeft size={24} />
+                    </button>
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-800">Minha Agenda</h1>
+                        <p className="text-sm text-gray-500">Gerencie seus horários de atendimento e bloqueios.</p>
+                    </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                    <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+                        {ubsName ? (
+                            <span className="font-semibold text-gray-700">{CnesService.formatCnesDisplayName(ubsName)} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+                        ) : (
+                            profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não informada'
+                        )}
+                        <span className="text-xs font-medium text-green-600">{profile?.name} • {profile?.specialty}</span>
+                    </div>
                 </div>
             </nav>
 

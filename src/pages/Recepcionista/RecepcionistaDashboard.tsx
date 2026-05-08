@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService, type CnesHorario } from '../../lib/cnesService';
-import { LogOut, Calendar, UserPlus, Clipboard, Clock } from 'lucide-react';
+import { LogOut, Calendar, UserPlus, Clipboard, Clock, Home } from 'lucide-react';
 
 interface UnidadeInfo {
     name?: string;
@@ -63,6 +63,7 @@ export default function RecepcionistaDashboard() {
     const [unitInfo, setUnitInfo] = useState<UnidadeInfo | null>(null);
     const [horariosUbs, setHorariosUbs] = useState<CnesHorario[]>([]);
     const [unitInfoLoading, setUnitInfoLoading] = useState(true);
+    const [unitName, setUnitName] = useState<string>('');
     const [horariosLoading, setHorariosLoading] = useState(false);
 
     const handleLogout = () => supabase.auth.signOut();
@@ -84,6 +85,7 @@ export default function RecepcionistaDashboard() {
 
                 if (!error && data) {
                     setUnitInfo(data as UnidadeInfo);
+                    setUnitName(CnesService.formatCnesDisplayName(data.name));
                 }
             } catch (err) {
                 console.error('Erro ao carregar informações da UBS:', err);
@@ -108,18 +110,35 @@ export default function RecepcionistaDashboard() {
     }, [profile?.ibge, profile?.cnes]);
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
-                <h1 className="text-xl font-bold text-gray-800">Painel da Recepção</h1>
-                <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 font-medium">{profile?.name}</span>
+        <div className="flex flex-col min-h-screen bg-gray-100 [scrollbar-gutter:stable]">
+            <nav className="bg-white shadow px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                        <Home size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-800">Painel da Recepção</h1>
+                        <p className="text-sm text-gray-500">Gestão de pacientes e agendamentos da unidade.</p>
+                    </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                    <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
+                        {unitName ? (
+                            <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
+                        ) : (
+                            profile?.cnes ? (
+                                <span className="font-semibold text-gray-700">Unidade <span className="font-normal text-gray-400 ml-1">CNES {profile.cnes}</span></span>
+                            ) : 'Unidade não informada'
+                        )}
+                        <span className="text-xs font-medium text-blue-600">{profile?.name}</span>
+                    </div>
                     <button onClick={handleLogout} className="flex items-center gap-1 text-red-600 hover:text-red-800 cursor-pointer font-bold text-sm">
                         <LogOut size={18} /> Sair
                     </button>
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                 <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6 mb-6">
                     <div className="flex items-center gap-3 mb-5">
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Clock size={24} /></div>
