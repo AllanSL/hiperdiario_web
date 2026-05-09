@@ -290,7 +290,7 @@ export default function ProfissionalAtendimentos() {
                   <div className="min-w-0">
                     <p className="font-bold text-gray-800 truncate">{patient?.name || 'Paciente'}</p>
                     <p className="text-xs text-gray-500 flex items-center gap-2">
-                      <span>CPF: {patient?.cpf ? formatCPF(patient.cpf) : '—'}</span>
+                      <span>CPF: {patient?.cpf ? formatCpf(patient.cpf) : '—'}</span>
                       {apt.checked_in_at && (
                         <span className="flex items-center gap-1 text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded">
                           <Clock size={10} /> {new Date(apt.checked_in_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}

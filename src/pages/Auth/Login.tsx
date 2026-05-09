@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { LogIn, Loader2 } from 'lucide-react';
-import { formatCpf, isValidCPF } from '../../lib/utils';
+import { formatCpf } from '../../lib/utils';
 
 export default function Login() {
     const [cpf, setCpf] = useState('');

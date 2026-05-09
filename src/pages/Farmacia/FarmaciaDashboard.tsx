@@ -548,6 +548,27 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
 
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, id?: string }>({ isOpen: false });
 
+    const fetchPatientMeds = async (patientId: string) => {
+        setLoadingMeds(true);
+        const { data } = await supabase
+            .from('medications')
+            .select(`
+                id, stock, frequency, dispensation_id,
+                medicine_dispensations!inner (
+                    id, catalog_id, dispensed_at, dispensed_quantity, frequency_label, scheduled_times,
+                    medicine_catalog (active_principle, strength, form, dispensing_unit)
+                )
+            `)
+            .eq('medicine_dispensations.patient_id', patientId)
+            .eq('medicine_dispensations.ubs_cnes', cnes)
+            .order('created_at', { ascending: false });
+
+        if (data) {
+            setPatientMeds(data);
+        }
+        setLoadingMeds(false);
+    };
+
     const searchPatient = async () => {
         const cleanCpf = searchCpf.replace(/\D/g, '');
         if (cleanCpf.length < 11) {
@@ -577,27 +598,6 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         } finally {
             setSearching(false);
         }
-    };
-
-    const fetchPatientMeds = async (patientId: string) => {
-        setLoadingMeds(true);
-        const { data } = await supabase
-            .from('medications')
-            .select(`
-                id, stock, frequency, dispensation_id,
-                medicine_dispensations!inner (
-                    id, catalog_id, dispensed_at, dispensed_quantity, frequency_label, scheduled_times,
-                    medicine_catalog (active_principle, strength, form, dispensing_unit)
-                )
-            `)
-            .eq('medicine_dispensations.patient_id', patientId)
-            .eq('medicine_dispensations.ubs_cnes', cnes)
-            .order('created_at', { ascending: false });
-
-        if (data) {
-            setPatientMeds(data);
-        }
-        setLoadingMeds(false);
     };
 
     const handleSaveEdit = async (id: string) => {
@@ -1125,9 +1125,9 @@ export default function FarmaciaDashboard() {
                     id: p.id,
                     cpf: p.cpf,
                     name: p.name,
-                    diseases: Array.isArray(p.diseases) ? p.diseases : []
+                    conditions: Array.isArray(p.diseases) ? p.diseases : []
                 });
-                fetchPatientMeds(p.id);
+
             }
         } catch (err: any) {
             console.error('Erro ao buscar paciente:', err);

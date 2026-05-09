@@ -5,7 +5,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService } from '../../lib/cnesService';
 
-import { ArrowLeft, Users, ChevronDown, UserCheck, Search } from 'lucide-react';
+import { ArrowLeft, Users, ChevronDown, UserCheck } from 'lucide-react';
 
 type ProfessionalSummary = {
   cns: string;

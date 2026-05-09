@@ -1022,7 +1022,7 @@ export default function RecepcionistaAgenda() {
                                         return (
                                           <>
                                             <p className="font-semibold text-gray-800">{patient?.name || 'Paciente não identificado'}</p>
-                                            <p className="text-sm text-gray-500">{patient?.cpf ? `CPF: ${formatCPF(patient.cpf)}` : 'CPF não disponível'}</p>
+                                            <p className="text-sm text-gray-500">{patient?.cpf ? `CPF: ${formatCpf(patient.cpf)}` : 'CPF não disponível'}</p>
                                           </>
                                         );
                                       })()}

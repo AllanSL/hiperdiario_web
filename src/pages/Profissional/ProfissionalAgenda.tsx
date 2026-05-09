@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { CnesService } from '../../lib/cnesService';
-import { ArrowLeft, Calendar, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity } from 'lucide-react';
+import { ArrowLeft, User, Clock, ChevronLeft, ChevronRight, Ban, X, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { formatCpf } from '../../lib/utils';
