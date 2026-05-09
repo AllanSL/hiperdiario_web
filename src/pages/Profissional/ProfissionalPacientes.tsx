@@ -139,11 +139,11 @@ export default function ProfissionalPacientes() {
       // Primeiro, busca o remote_id do paciente (UUID)
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
-        .select('remote_id')
+        .select('user_id')
         .eq('id', patientId)
         .single();
 
-      if (patientError || !patientData?.remote_id) {
+      if (patientError || !patientData?.user_id) {
         throw new Error('Paciente não encontrado');
       }
 
@@ -171,7 +171,7 @@ export default function ProfissionalPacientes() {
             )
           )
         `)
-        .eq('owner_id', patientData.remote_id)
+        .eq('owner_id', patientData.user_id)
         .not('dispensation_id', 'is', null)
         .order('created_at', { ascending: false });
 
