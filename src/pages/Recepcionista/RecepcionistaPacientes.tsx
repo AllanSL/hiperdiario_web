@@ -398,7 +398,11 @@ export default function RecepcionistaPacientes() {
                 patientData: payload // Passamos os dados para garantir o vínculo no upsert
               }
             });
-            if (authError || data?.error) throw new Error(authError?.message || data?.error || 'Erro ao criar login para paciente existente');
+            if (authError) {
+              const errorBody = await authError.context?.json().catch(() => ({}));
+              throw new Error(errorBody?.error || authError.message);
+            }
+            if (data?.error) throw new Error(data.error);
           } else {
             // Se já tem user_id, apenas atualizamos a senha
             const { data, error: authError } = await supabase.functions.invoke('manage-patient-auth', {
@@ -408,7 +412,11 @@ export default function RecepcionistaPacientes() {
                 password: form.password
               }
             });
-            if (authError || data?.error) throw new Error(authError?.message || data?.error || 'Erro ao atualizar senha');
+            if (authError) {
+              const errorBody = await authError.context?.json().catch(() => ({}));
+              throw new Error(errorBody?.error || authError.message);
+            }
+            if (data?.error) throw new Error(data.error);
           }
         }
 
@@ -424,7 +432,10 @@ export default function RecepcionistaPacientes() {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          const errorBody = await error.context?.json().catch(() => ({}));
+          throw new Error(errorBody?.error || error.message);
+        }
         if (data?.error) throw new Error(data.error);
 
         showNotification('success', 'Paciente e login criados com sucesso.');

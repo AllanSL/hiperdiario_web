@@ -18,12 +18,13 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     )
 
-    const { action, cpf, password, patientData } = await req.json()
+    const { action, cpf, password, patientData, userId: bodyUserId } = await req.json()
 
     const cleanCpf = cpf?.replace(/\D/g, '')
-    if (!cleanCpf) throw new Error('CPF é obrigatório')
 
     if (action === 'create' || action === 'check') {
+      if (!cleanCpf) throw new Error('CPF é obrigatório')
+
       let userId: string | null = null;
       let existingEmail: string | null = null;
 
@@ -148,6 +149,24 @@ serve(async (req) => {
         email: existingEmail,
         patient: patientRecord 
       }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    if (action === 'update') {
+      if (!bodyUserId) throw new Error('ID do usuário é obrigatório para atualização')
+      if (!password) throw new Error('Nova senha é obrigatória')
+
+      console.log(`Atualizando senha para o usuário: ${bodyUserId}`)
+      
+      const { error: updateError } = await supabaseClient.auth.admin.updateUserById(bodyUserId, {
+        password: password
+      })
+
+      if (updateError) throw updateError
+
+      return new Response(JSON.stringify({ success: true, message: 'Senha atualizada com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
