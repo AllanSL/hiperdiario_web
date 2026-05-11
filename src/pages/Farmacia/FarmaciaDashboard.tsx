@@ -520,9 +520,9 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
         const times = [start];
         let freq = 0;
         let count = 1;
-        
+
         const cleanLabel = label.toLowerCase();
-        
+
         if (cleanLabel.includes('12/12h') || cleanLabel.includes('2x ao dia') || cleanLabel.includes('2x dia')) {
             freq = 12;
             count = 2;
@@ -844,14 +844,14 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
                                                     onClick={() => {
                                                         setEditingMed(med.id);
                                                         setEditQuantity(med.stock || 0);
-                                                        
+
                                                         // Tenta inferir a frequência se o label estiver vazio
                                                         const freqCount = med.frequency?.length || 0;
-                                                        const inferredLabel = freqCount === 2 ? '12/12h' : 
-                                                                            freqCount === 3 ? '8/8h' : 
-                                                                            freqCount === 4 ? '6/6h' : 
-                                                                            freqCount === 6 ? '4/4h' : '1x ao dia';
-                                                                            
+                                                        const inferredLabel = freqCount === 2 ? '12/12h' :
+                                                            freqCount === 3 ? '8/8h' :
+                                                                freqCount === 4 ? '6/6h' :
+                                                                    freqCount === 6 ? '4/4h' : '1x ao dia';
+
                                                         setEditFrequencyLabel(oDisp.frequency_label || inferredLabel);
                                                         setEditStartTime(med.frequency?.[0] || '08:00');
                                                     }}
@@ -1075,7 +1075,7 @@ export default function FarmaciaDashboard() {
                     .select('name')
                     .eq('cnes_id', profile.cnes)
                     .maybeSingle();
-                
+
                 if (data?.name) {
                     setUbsName(CnesService.formatCnesDisplayName(data.name));
                 }
@@ -1299,7 +1299,7 @@ export default function FarmaciaDashboard() {
                         <p className="text-sm text-gray-500">Controle de estoque e dispensação de medicamentos.</p>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
                     <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
                         {ubsName ? (
                             <span className="font-semibold text-gray-700">{ubsName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>

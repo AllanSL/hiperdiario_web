@@ -293,7 +293,7 @@ export default function ProfissionalAgenda() {
                         <p className="text-sm text-gray-500">Gerencie seus horários de atendimento e bloqueios.</p>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
                     <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
                         {ubsName ? (
                             <span className="font-semibold text-gray-700">{CnesService.formatCnesDisplayName(ubsName)} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>

@@ -65,7 +65,7 @@ export default function ProfissionalDashboard() {
                         <p className="text-sm text-gray-500">Gestão de atendimentos e histórico clínico.</p>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
                     <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
                         {unitName ? (
                             <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
@@ -88,7 +88,7 @@ export default function ProfissionalDashboard() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {/* Atendimentos do Dia */}
-                        <div 
+                        <div
                             onClick={() => navigate('/profissional/atendimentos')}
                             className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-green-500 cursor-pointer hover:shadow-lg transition"
                         >
@@ -97,7 +97,7 @@ export default function ProfissionalDashboard() {
                                 <h2 className="text-lg font-semibold">Atendimentos do Dia</h2>
                             </div>
                             <p className="mt-2 text-gray-600 flex-grow">
-                                {stats.total === 0 
+                                {stats.total === 0
                                     ? 'Nenhum atendimento agendado para hoje.'
                                     : (
                                         <>
@@ -112,7 +112,7 @@ export default function ProfissionalDashboard() {
                         </div>
 
                         {/* Agenda */}
-                        <div 
+                        <div
                             onClick={() => navigate('/profissional/agenda')}
                             className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-indigo-500 cursor-pointer hover:shadow-lg transition"
                         >
@@ -126,7 +126,7 @@ export default function ProfissionalDashboard() {
                         </div>
 
                         {/* Pacientes */}
-                        <div 
+                        <div
                             onClick={() => navigate('/profissional/pacientes')}
                             className="bg-white flex flex-col p-6 rounded-lg shadow border-t-4 border-purple-500 cursor-pointer hover:shadow-lg transition"
                         >

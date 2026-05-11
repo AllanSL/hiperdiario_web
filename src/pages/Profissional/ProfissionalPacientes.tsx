@@ -350,7 +350,7 @@ export default function ProfissionalPacientes() {
             <p className="text-sm text-gray-500">Visualize e edite as condições/doenças dos pacientes.</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
+        <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
           <div className="text-center sm:text-right text-sm text-gray-500 flex flex-col">
             {unitName ? (
               <span className="font-semibold text-gray-700">{unitName} <span className="font-normal text-gray-400 ml-1">CNES {profile?.cnes}</span></span>
