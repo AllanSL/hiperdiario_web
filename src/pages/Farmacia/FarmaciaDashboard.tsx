@@ -1250,6 +1250,7 @@ export default function FarmaciaDashboard() {
     const handleDispense = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (submitting) return; // Previne múltiplos cliques
         if (!patient) return showNotification('error', 'Selecione o paciente.');
         if (!selectedMed) return showNotification('error', 'Selecione o medicamento.');
         if (dispensedQuantity <= 0) return showNotification('error', 'Quantidade inválida.');
@@ -1270,19 +1271,20 @@ export default function FarmaciaDashboard() {
 
             if (insErr) {
                 if (insErr.message.includes('Estoque insuficiente')) {
+                    setSubmitting(false);
                     return showNotification('error', 'Estoque insuficiente para esta UBS.');
                 }
                 throw insErr;
             }
 
             showNotification('success', 'Dispensação registrada com sucesso!');
-            // Reset form
+            // Reset form - Aguarda 2s e fecha, mantendo botão desabilitado
             setTimeout(() => {
                 handleCloseModal();
+                setSubmitting(false);
             }, 2000);
         } catch (err: any) {
             showNotification('error', err.message || 'Erro ao registrar.');
-        } finally {
             setSubmitting(false);
         }
     };
