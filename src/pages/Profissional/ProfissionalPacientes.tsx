@@ -136,7 +136,7 @@ export default function ProfissionalPacientes() {
     try {
       setMedicinesLoading(prev => new Set(prev).add(patientId));
 
-      // Primeiro, busca o remote_id do paciente (UUID)
+      // Primeiro, busca o user_id do paciente (UUID do auth)
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
         .select('user_id')
@@ -147,7 +147,7 @@ export default function ProfissionalPacientes() {
         throw new Error('Paciente não encontrado');
       }
 
-      // Busca os medicamentos ativos da tabela medications usando o remote_id
+      // Busca os medicamentos ativos usando o user_id como owner_id
       const { data, error } = await supabase
         .from('medications')
         .select(`

@@ -1272,7 +1272,8 @@ export default function FarmaciaDashboard() {
                 p_quantity: dispensedQuantity,
                 p_doctor_name: doctorName,
                 p_prescription_date: prescriptionDate,
-                p_frequency_per_day: computedFrequencyPerDay
+                p_frequency_per_day: computedFrequencyPerDay,
+                p_frequency_label: usageFrequency || null
             });
 
             if (insErr) {

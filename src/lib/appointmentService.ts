@@ -21,7 +21,7 @@ export class AppointmentService {
 
       let query = supabase
         .from('appointments')
-        .select('id')
+        .select('id, professionals!inner(specialty)')
         .eq('cnes_id', cnes_id)
         .eq('shift', shift)
         .gte('date_time', startOfDay)
@@ -30,8 +30,8 @@ export class AppointmentService {
 
       if (professional_cns) {
         query = query.eq('professional_cns', professional_cns);
-      } else {
-        query = query.eq('specialty', specialty);
+      } else if (specialty) {
+        query = query.eq('professionals.specialty', specialty);
       }
 
       const { data, error } = await query;
@@ -77,14 +77,14 @@ export class AppointmentService {
 
       let query = supabase
         .from('appointments')
-        .select('id, date_time, status, notes, cnes_id, specialty, professional_cns, patient_id, shift, patients(id, name, cpf), professionals(cns, name, specialty)')
+        .select('id, date_time, status, notes, cnes_id, professional_cns, patient_id, shift, patients(id, name, cpf), professionals!inner(cns, name, specialty)')
         .eq('cnes_id', cnes_id)
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
         .order('date_time', { ascending: true });
 
       if (specialty) {
-        query = query.eq('specialty', specialty);
+        query = query.eq('professionals.specialty', specialty);
       }
 
       const { data, error } = await query;
@@ -111,7 +111,6 @@ export class AppointmentService {
         status: appointmentData.status || 'scheduled',
         notes: appointmentData.notes || '',
         cnes_id: appointmentData.cnes_id || 'Não informado',
-        specialty: appointmentData.specialty || '',
         professional_cns: appointmentData.professional_cns || null,
         patient_id: appointmentData.patient_id,
         shift: appointmentData.shift || 'morning',

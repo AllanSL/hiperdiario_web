@@ -9,7 +9,7 @@ import type { VitalSigns, ClinicalNote } from '../../lib/database.types';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatCpf } from '../../lib/utils';
 
-type Patient = { id: string; name: string; cpf: string; diseases?: string[]; remote_id?: string };
+type Patient = { id: string; name: string; cpf: string; diseases?: string[]; user_id?: string };
 type Medicine = { id: string; active_principle: string; strength: string; form: string; stock: number; dispensing_unit: string; frequency_label: string };
 type Appointment = {
   id: string; date_time: string; status: string | null; shift?: string;
@@ -175,12 +175,12 @@ export default function ProfissionalAtendimentos() {
     if (!patient) return;
     try {
       setMedsLoading(true);
-      const { data: pData } = await supabase.from('patients').select('remote_id').eq('id', patient.id).single();
-      if (!pData?.remote_id) { setMedicines([]); return; }
+      const { data: pData } = await supabase.from('patients').select('user_id').eq('id', patient.id).single();
+      if (!pData?.user_id) { setMedicines([]); return; }
       const { data } = await supabase
         .from('medications')
         .select('id, stock, medicine_dispensations:dispensation_id ( frequency_label, medicine_catalog:catalog_id ( active_principle, strength, form, dispensing_unit ) )')
-        .eq('owner_id', pData.remote_id).not('dispensation_id', 'is', null);
+        .eq('owner_id', pData.user_id).not('dispensation_id', 'is', null);
       setMedicines((data || []).map((m: any) => ({
         id: m.id, stock: m.stock,
         active_principle: m.medicine_dispensations?.medicine_catalog?.active_principle || '?',

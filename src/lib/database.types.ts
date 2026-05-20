@@ -8,7 +8,6 @@ export interface Appointment {
   status: AppointmentStatus | string | null;
   notes?: string;
   cnes_id?: string;
-  specialty?: string;
   professional_cns?: string;
   patient_id?: string;
   shift?: ShiftType;
