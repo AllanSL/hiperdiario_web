@@ -26,7 +26,7 @@ interface Patient {
     conditions?: string[]; // Array de condições (ex: ['Diabetes Tipo 1', 'Hipertensão'])
 }
 
-function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] }) {
+function FarmaciaEstoque({ cnes, catalog, initialFilter = 'all' }: { cnes: string; catalog: Medicine[]; initialFilter?: string }) {
     const [inventory, setInventory] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const { showNotification } = useNotification();
@@ -36,7 +36,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
     // Filters
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('');
-    const [stockFilter, setStockFilter] = useState('all'); // 'all', 'in_stock', 'out_of_stock'
+    const [stockFilter, setStockFilter] = useState(initialFilter);
 
     const availableCategories = useMemo(() => {
         return Array.from(new Set(catalog.map(c => c.category))).sort();
@@ -104,6 +104,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
         let matchStock = true;
         if (stockFilter === 'in_stock') matchStock = stock > 0;
         if (stockFilter === 'out_of_stock') matchStock = stock === 0;
+        if (stockFilter === 'low_stock') matchStock = stock < 50;
 
         return matchSearch && matchCat && matchStock;
     });
@@ -125,6 +126,7 @@ function FarmaciaEstoque({ cnes, catalog }: { cnes: string; catalog: Medicine[] 
                         <option value="all">Todos os status</option>
                         <option value="in_stock">Com saldo em estoque</option>
                         <option value="out_of_stock">Sem saldo (Zerado)</option>
+                        <option value="low_stock">Estoque Baixo ({"<"} 50)</option>
                     </select>
 
                     <select
@@ -880,7 +882,7 @@ function FarmaciaPacientes({ cnes }: { cnes: string }) {
     );
 }
 
-function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogSize: number }) {
+function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }: { cnes: string, catalogSize: number, onNavigateToEstoqueBaixo?: () => void }) {
     const [stats, setStats] = useState({
         lowStockItems: 0,
         dispensationsToday: 0,
@@ -953,7 +955,10 @@ function FarmaciaResumoDashboard({ cnes, catalogSize }: { cnes: string, catalogS
                     </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition">
+                <div 
+                    className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md hover:border-orange-200 transition cursor-pointer"
+                    onClick={onNavigateToEstoqueBaixo}
+                >
                     <div className="p-3 bg-orange-50 text-orange-500 rounded-lg"><TrendingDown size={24} /></div>
                     <div>
                         <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Abaixo do Estoque</p>
@@ -1035,6 +1040,7 @@ export default function FarmaciaDashboard() {
     const [searching, setSearching] = useState(false);
     const { showNotification } = useNotification();
     const [activeTab, setActiveTab] = useState<'inicio' | 'estoque' | 'historico' | 'monitoramento' | 'pacientes'>('inicio');
+    const [estoqueFilterParam, setEstoqueFilterParam] = useState('all');
     const [ubsName, setUbsName] = useState<string>('');
 
     const [selectedPrinciple, setSelectedPrinciple] = useState('');
@@ -1350,7 +1356,10 @@ export default function FarmaciaDashboard() {
                         <div className="flex items-center gap-2"><Home size={18} /> Início (Resumo)</div>
                     </button>
                     <button
-                        onClick={() => setActiveTab('estoque')}
+                        onClick={() => {
+                            setEstoqueFilterParam('all');
+                            setActiveTab('estoque');
+                        }}
                         className={`pb-3 font-medium text-sm border-b-2 transition whitespace-nowrap ${activeTab === 'estoque' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
                         <div className="flex items-center gap-2"><PackageSearch size={18} /> Controle de Estoque</div>
@@ -1377,10 +1386,17 @@ export default function FarmaciaDashboard() {
 
                 <div className="flex-1 flex flex-col min-h-0 w-full">
                     {activeTab === 'inicio' && (
-                        <FarmaciaResumoDashboard cnes={profile?.cnes || ''} catalogSize={medicines.length} />
+                        <FarmaciaResumoDashboard 
+                            cnes={profile?.cnes || ''} 
+                            catalogSize={medicines.length} 
+                            onNavigateToEstoqueBaixo={() => {
+                                setEstoqueFilterParam('low_stock');
+                                setActiveTab('estoque');
+                            }}
+                        />
                     )}
                     {activeTab === 'estoque' && (
-                        <FarmaciaEstoque cnes={profile?.cnes || ''} catalog={medicines} />
+                        <FarmaciaEstoque cnes={profile?.cnes || ''} catalog={medicines} initialFilter={estoqueFilterParam} />
                     )}
                     {activeTab === 'historico' && (
                         <FarmaciaHistorico cnes={profile?.cnes || ''} />
