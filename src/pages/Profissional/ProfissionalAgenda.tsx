@@ -87,7 +87,6 @@ export default function ProfissionalAgenda() {
                     status,
                     notes,
                     cnes_id,
-                    specialty,
                     shift,
                     patients ( name, cpf ),
                     cnes_establishments ( name )
@@ -105,7 +104,7 @@ export default function ProfissionalAgenda() {
                 setBlockForm(prev => ({
                     ...prev,
                     location: aptData[0].cnes_id || prev.location || '',
-                    specialty: prev.specialty || profile?.specialty || aptData[0].specialty || ''
+                    specialty: prev.specialty || profile?.specialty || ''
                 }));
             }
 

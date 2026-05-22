@@ -889,6 +889,7 @@ function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }
         totalPatientsTreated: 0
     });
     const [recentActivies, setRecentActivities] = useState<any[]>([]);
+    const [lowStockDetails, setLowStockDetails] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -927,12 +928,30 @@ function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }
                 .order('dispensed_at', { ascending: false })
                 .limit(4);
 
+            // 5. Buscar detalhes de itens com estoque crítico (ordenados pelo menor estoque)
+            const { data: lowStockData } = await supabase
+                .from('pharmacy_inventory')
+                .select(`
+                    id,
+                    quantity_in_stock,
+                    medicine_catalog:catalog_id (
+                        active_principle,
+                        strength,
+                        dispensing_unit
+                    )
+                `)
+                .eq('ubs_cnes', cnes)
+                .lt('quantity_in_stock', 50)
+                .order('quantity_in_stock', { ascending: true })
+                .limit(4);
+
             setStats({
                 lowStockItems: lowStockCount || 0,
                 dispensationsToday: dispTodayCount || 0,
                 totalPatientsTreated: uniquePatients || 0
             });
             setRecentActivities(recentMsg || []);
+            setLowStockDetails(lowStockData || []);
             setLoading(false);
         };
 
@@ -1013,13 +1032,95 @@ function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }
                     )}
                 </div>
 
-                {/* 2. Dica Rápida / Informações do Sistema */}
-                <div className="bg-gradient-to-br from-teal-600 to-teal-800 p-6 rounded-xl shadow-sm text-white flex flex-col h-full min-h-[300px]">
-                    <h3 className="font-bold text-xl mb-2 text-teal-50">Bem-vindo(a) ao Farmácia Mais</h3>
-                    <p className="text-teal-100 text-lg mb-4 leading-relaxed">
-                        Este painel é o coração do controle de suprimentos do sistema Hiperdiário. <br />
-                        Aproveite as abas acima para repor estoques, validar as receitas e gerenciar o tratamento dos pacientes em tempo real de forma colaborativa com o aplicativo móvel deles.
-                    </p>
+                {/* 2. Monitor de Estoque Crítico */}
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col h-full min-h-[300px]">
+                    <div className="flex items-center justify-between mb-4 shrink-0">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle size={20} className="text-orange-500" />
+                            <h3 className="font-bold text-gray-800">Alerta de Estoque Crítico</h3>
+                        </div>
+                        {lowStockDetails.length > 0 && (
+                            <span className="bg-red-50 text-red-600 text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
+                                {stats.lowStockItems} itens em risco
+                            </span>
+                        )}
+                    </div>
+
+                    {lowStockDetails.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-green-50/50 rounded-xl border border-dashed border-green-100">
+                            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-3">
+                                <CheckCircle size={24} />
+                            </div>
+                            <h4 className="font-semibold text-green-800 text-sm">Estoque 100% Regular</h4>
+                            <p className="text-xs text-green-600 mt-1 max-w-[240px]">
+                                Todos os medicamentos ativos estão com níveis acima do limite crítico de segurança.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-1 min-h-0 mb-4">
+                            {lowStockDetails.map((item) => {
+                                const qty = item.quantity_in_stock || 0;
+                                const catalog = item.medicine_catalog;
+                                const percentage = Math.min(Math.max((qty / 100) * 100, 0), 100);
+
+                                // Determinar cor do badge e da barra
+                                let badgeColor = "bg-yellow-50 text-yellow-700 border-yellow-200";
+                                let barColor = "bg-yellow-500";
+                                let badgeText = "Estoque Baixo";
+
+                                if (qty === 0) {
+                                    badgeColor = "bg-red-50 text-red-700 border-red-200";
+                                    barColor = "bg-red-500";
+                                    badgeText = "Esgotado";
+                                } else if (qty < 20) {
+                                    badgeColor = "bg-orange-50 text-orange-700 border-orange-200";
+                                    barColor = "bg-orange-500";
+                                    badgeText = "Crítico";
+                                }
+
+                                return (
+                                    <div key={item.id} className="space-y-1.5 pb-2 border-b border-gray-50 last:border-0 last:pb-0">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-900 leading-tight">
+                                                    {catalog?.active_principle}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {catalog?.strength}
+                                                </p>
+                                            </div>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider shrink-0 ${badgeColor}`}>
+                                                {badgeText}
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between text-[11px] text-gray-500">
+                                                <span>Disponível: <strong className={qty === 0 ? 'text-red-600' : qty < 20 ? 'text-orange-600' : 'text-gray-700'}>{qty} {catalog?.dispensing_unit || 'un.'}</strong></span>
+                                                <span>Meta: 100 un.</span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full transition-all duration-500 ${barColor}`}
+                                                    style={{ width: `${percentage}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {onNavigateToEstoqueBaixo && (
+                        <button
+                            onClick={onNavigateToEstoqueBaixo}
+                            className="w-full py-2 bg-gray-50 hover:bg-teal-50 hover:text-teal-700 text-gray-700 border border-gray-100 hover:border-teal-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition shrink-0"
+                        >
+                            <PackageSearch size={16} />
+                            Gerenciar Estoque Completo
+                        </button>
+                    )}
                 </div>
 
             </div>
