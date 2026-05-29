@@ -974,7 +974,7 @@ function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }
                     </div>
                 </div>
 
-                <div 
+                <div
                     className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md hover:border-orange-200 transition cursor-pointer"
                     onClick={onNavigateToEstoqueBaixo}
                 >
@@ -1041,7 +1041,7 @@ function FarmaciaResumoDashboard({ cnes, catalogSize, onNavigateToEstoqueBaixo }
                         </div>
                         {lowStockDetails.length > 0 && (
                             <span className="bg-red-50 text-red-600 text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
-                                {stats.lowStockItems} itens em risco
+                                {stats.lowStockItems} {stats.lowStockItems === 1 ? 'item' : 'itens'} em risco
                             </span>
                         )}
                     </div>
@@ -1435,9 +1435,9 @@ export default function FarmaciaDashboard() {
                 <div className="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">Dispensação e Estoque</h2>
-                        <p className="text-sm text-gray-500 font-medium">
+                        {/* <p className="text-sm text-gray-500 font-medium">
                             {ubsName || (profile?.cnes ? `UBS CNES ${profile.cnes}` : 'Unidade não identificada')}
-                        </p>
+                        </p> */}
                         <p className="text-sm text-gray-500">
                             Gerencie o fluxo de medicamentos da unidade em tempo real.
                         </p>
@@ -1488,9 +1488,9 @@ export default function FarmaciaDashboard() {
 
                 <div className="flex-1 flex flex-col min-h-0 w-full">
                     {activeTab === 'inicio' && (
-                        <FarmaciaResumoDashboard 
-                            cnes={profile?.cnes || ''} 
-                            catalogSize={medicines.length} 
+                        <FarmaciaResumoDashboard
+                            cnes={profile?.cnes || ''}
+                            catalogSize={medicines.length}
                             onNavigateToEstoqueBaixo={() => {
                                 setEstoqueFilterParam('low_stock');
                                 setActiveTab('estoque');
